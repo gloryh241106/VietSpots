@@ -58,6 +58,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               : _emailController.text.split('@')[0],
           'phone': _phoneController.text.trim(),
           'avatar_url': 'https://i.pravatar.cc/300',
+          'has_onboarded': false,
         },
       );
 

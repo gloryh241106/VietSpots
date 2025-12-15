@@ -80,6 +80,14 @@ class _PermissionsScreenState extends State<PermissionsScreen>
       debugPrint('Permission request timed out or failed: $e');
     }
 
+    // Mark onboarding as complete
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.completeOnboarding();
+    } catch (e) {
+      debugPrint('Error completing onboarding: $e');
+    }
+
     if (mounted) {
       print('Navigating to Home...');
       // Use pushNamedAndRemoveUntil to clear the back stack (Login, Register, etc.)

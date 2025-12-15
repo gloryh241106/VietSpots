@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:vietspots/screens/auth/edit_profile_screen.dart';
 import 'package:vietspots/screens/auth/login_screen.dart';
 import 'package:vietspots/screens/main/main_screen.dart';
 
@@ -30,11 +31,21 @@ class _AuthGateState extends State<AuthGate> {
         // Get current session from the auth state
         final session = snapshot.data!.session;
 
-        // If user is logged in, show MainScreen, otherwise show LoginScreen
-        if (session != null) {
+        // If user is not logged in, show LoginScreen
+        if (session == null) {
+          return const LoginScreen();
+        }
+
+        // User is logged in, check if they've completed onboarding
+        final user = session.user;
+        final hasOnboarded = user.userMetadata?['has_onboarded'] ?? false;
+
+        if (hasOnboarded) {
+          // Onboarding complete, show MainScreen
           return const MainScreen();
         } else {
-          return const LoginScreen();
+          // Need to complete onboarding
+          return const EditProfileScreen();
         }
       },
     );

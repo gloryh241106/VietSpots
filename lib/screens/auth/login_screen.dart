@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:vietspots/screens/auth/edit_profile_screen.dart';
 import 'package:vietspots/screens/auth/forgot_password_screens.dart';
 import 'package:vietspots/screens/auth/registration_screen.dart';
 import 'package:vietspots/widgets/resend_verification_dialog.dart';
@@ -76,7 +77,23 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Navigation is handled by AuthGate
+      // Check onboarding status and navigate accordingly
+      if (mounted && response.user != null) {
+        final hasOnboarded =
+            response.user!.userMetadata?['has_onboarded'] ?? false;
+
+        if (hasOnboarded) {
+          // Navigate to main screen
+          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        } else {
+          // Navigate to onboarding
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const EditProfileScreen(),
+            ),
+          );
+        }
+      }
     } on AuthException catch (error) {
       if (mounted) {
         // Handle specific error messages

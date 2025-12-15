@@ -117,6 +117,17 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> completeOnboarding() async {
+    try {
+      await _supabase.auth.updateUser(
+        UserAttributes(data: {'has_onboarded': true}),
+      );
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _supabase.auth.signOut();

@@ -99,8 +99,7 @@ class MockDataService {
     Place(
       id: 'd12_3',
       name: 'Crocodile Farm',
-      imageUrl:
-          'https://lh3.googleusercontent.com/p/AF1QipNq_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q',
+      imageUrl: 'https://picsum.photos/seed/d12_3/400/300',
       rating: 4.0,
       location: 'District 12, HCMC',
       description: 'Farm with crocodiles and restaurant.',
@@ -111,8 +110,7 @@ class MockDataService {
     Place(
       id: 'd12_4',
       name: 'Go Vap Park',
-      imageUrl:
-          'https://lh3.googleusercontent.com/p/AF1QipNq_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q',
+      imageUrl: 'https://picsum.photos/seed/d12_4/400/300',
       rating: 4.2,
       location: 'Near District 12',
       description: 'Green park for jogging and relaxing.',
@@ -123,8 +121,7 @@ class MockDataService {
     Place(
       id: 'd12_5',
       name: 'Local Street Food Market',
-      imageUrl:
-          'https://lh3.googleusercontent.com/p/AF1QipNq_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q_5q',
+      imageUrl: 'https://picsum.photos/seed/d12_5/400/300',
       rating: 4.6,
       location: 'District 12, HCMC',
       description: 'Best local dishes in the area.',
