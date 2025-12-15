@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:vietspots/providers/auth_provider.dart';
 import 'package:vietspots/providers/chat_provider.dart';
 import 'package:vietspots/providers/localization_provider.dart';
@@ -10,7 +11,14 @@ import 'package:vietspots/screens/splash_screen.dart';
 import 'package:vietspots/screens/auth/login_screen.dart';
 import 'package:vietspots/utils/theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://aaezaowgeonxzpcafesa.supabase.co',
+    anonKey: 'sb_publishable_Y9btDvqH6rr7C4xQxQ09Rg_zYEVcw7c',
+  );
+
   runApp(const VietSpotsApp());
 }
 

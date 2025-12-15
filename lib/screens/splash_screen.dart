@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vietspots/screens/auth/login_screen.dart';
+import 'package:vietspots/widgets/auth_gate.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -12,15 +12,15 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToLogin();
+    _navigateToAuthGate();
   }
 
-  _navigateToLogin() async {
+  _navigateToAuthGate() async {
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        MaterialPageRoute(builder: (context) => const AuthGate()),
       );
     }
   }
