@@ -6,7 +6,7 @@ A modern, professionally-designed Flutter application for discovering and explor
 
 ### 🤖 AI-Powered Experience
 - **Intelligent Travel Assistant**: Chat with VietSpots AI for personalized travel recommendations
-- **Context-Aware Suggestions**: Location-based recommendations with chat history
+- **Chat History (In-session)**: Open previous conversations from the History drawer
 - **Real-time Responses**: Smooth chat interface with typing indicators and timestamps
 
 ### 🎨 Professional UI/UX Design
@@ -22,8 +22,14 @@ A modern, professionally-designed Flutter application for discovering and explor
 - **Favorites Management**: Save and organize your favorite places
 - **User Authentication**: Secure login and registration system
 - **Notifications**: Visual states for read/unread with red dot indicators
+- **Notification Details**: Tap a notification to see the full content
 - **Dark/Light Theme**: Seamless theme switching with proper contrast
-- **Multi-language Support**: English/Vietnamese localization
+- **Multi-language Support**: English/Vietnamese/Russian/Chinese via `LocalizationProvider`
+- **Profile & Settings**:
+   - Change avatar from the device gallery (with runtime permission)
+   - General Information: Full name, email, phone (validated)
+   - Private Information: Preferences, Culture, Religion, Companion preference
+   - Change Password: validates current password (demo/in-memory)
 - **Offline Support**: Mock data for demonstration purposes
 
 ## Screenshots
@@ -131,6 +137,7 @@ lib/
 │   │   ├── search_screen.dart # Search with filters
 │   │   ├── chat_screen.dart  # AI chat assistant
 │   │   ├── notification_screen.dart # Notifications with visual states
+│   │   ├── notification_detail_screen.dart # Full notification view
 │   │   ├── favorites_screen.dart # Saved places
 │   │   ├── settings_screen.dart # User settings
 │   │   └── main_screen.dart  # Bottom navigation wrapper
@@ -138,6 +145,7 @@ lib/
 │   └── splash_screen.dart    # App launch screen
 ├── utils/                    # Utilities and design system
 │   ├── mock_data.dart        # Sample data for demo
+│   ├── avatar_image_provider.dart # Avatar: network vs local file
 │   ├── theme.dart            # Theme configuration (colors, card styles)
 │   └── typography.dart       # Design tokens (fonts, spacing, colors)
 └── widgets/                  # Reusable widgets
@@ -213,9 +221,10 @@ Key packages used in this project:
 - **provider** (^6.1.2): State management
 - **cached_network_image** (^3.4.1): Optimized image loading and caching
 - **permission_handler** (^11.4.0): Runtime permission management
+- **image_picker** (^1.1.2): Pick avatar image from device gallery
 - **url_launcher** (^6.3.1): Open URLs and external apps
 - **intl** (^0.19.0): Internationalization and date formatting
-- **google_fonts** (^6.2.1): Poppins font family for consistent typography
+- **google_fonts** (^6.2.1): Noto Sans for better multi-language glyph coverage
 
 See `pubspec.yaml` for complete list of dependencies.
 
@@ -249,6 +258,10 @@ See `pubspec.yaml` for complete list of dependencies.
 - **Provider Pattern**: Separation of business logic from UI
 - **Consumer Widgets**: Efficient rebuilds for specific state changes
 - **ChangeNotifier**: Reactive state updates
+
+### Notes / Limitations (Current)
+- Chat history and user profile are stored **in memory** (demo mode). There is no persistence layer in this project.
+- Password validation in "Change Password" is also **in-memory demo logic** (no backend).
 
 ### Code Quality
 - **Type Safety**: Strict null safety enabled

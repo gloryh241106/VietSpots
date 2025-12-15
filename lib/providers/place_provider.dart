@@ -9,6 +9,32 @@ class PlaceProvider extends ChangeNotifier {
   ];
   final Set<String> _favoriteIds = {};
 
+  // Manage comments in-memory
+  void addComment(String placeId, PlaceComment comment) {
+    final idx = _places.indexWhere((p) => p.id == placeId);
+    if (idx == -1) return;
+    final place = _places[idx];
+    final updated = Place(
+      id: place.id,
+      nameLocalized: place.nameLocalized,
+      imageUrl: place.imageUrl,
+      rating:
+          ((place.rating * place.commentCount) + comment.rating) /
+          (place.commentCount + 1),
+      location: place.location,
+      descriptionLocalized: place.descriptionLocalized,
+      commentCount: place.commentCount + 1,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      price: place.price,
+      openingTime: place.openingTime,
+      website: place.website,
+      comments: [...place.comments, comment],
+    );
+    _places[idx] = updated;
+    notifyListeners();
+  }
+
   List<Place> get places => _places;
 
   List<Place> get favoritePlaces {

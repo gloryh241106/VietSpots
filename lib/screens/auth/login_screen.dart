@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vietspots/providers/auth_provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/screens/auth/forgot_password_screens.dart';
 import 'package:vietspots/screens/auth/registration_screen.dart';
 import 'package:vietspots/screens/main/main_screen.dart';
@@ -30,6 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -40,14 +42,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.travel_explore,
-                    size: 80,
-                    color: Theme.of(context).primaryColor,
+                  Center(
+                    child: Image.asset(
+                      'assets/icons/VietSpots_app_icon.png',
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Welcome Back',
+                    loc.translate('welcome_back'),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -55,18 +60,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Login to continue your journey',
+                  Text(
+                    loc.translate('login_subtitle'),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 48),
                   TextField(
                     controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: loc.translate('email'),
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -74,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      labelText: loc.translate('password'),
                       prefixIcon: const Icon(Icons.lock_outline),
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
@@ -102,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         );
                       },
-                      child: const Text('Forgot Password?'),
+                      child: Text(loc.translate('forgot_password')),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -116,9 +121,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Login',
-                        style: TextStyle(
+                      child: Text(
+                        loc.translate('login'),
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -129,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("Don't have an account? "),
+                      Text(loc.translate('dont_have_account')),
                       GestureDetector(
                         onTap: () {
                           Navigator.push(
@@ -140,7 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                         },
                         child: Text(
-                          'Sign Up',
+                          loc.translate('sign_up'),
                           style: TextStyle(
                             color: Theme.of(context).primaryColor,
                             fontWeight: FontWeight.bold,

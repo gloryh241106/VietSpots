@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vietspots/models/place_model.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/providers/place_provider.dart';
 import 'package:vietspots/screens/detail/place_detail_screen.dart';
 import 'package:vietspots/utils/theme.dart';
@@ -31,13 +32,20 @@ class _SearchScreenState extends State<SearchScreen> {
   void _filterPlaces(String query) {
     final placeProvider = Provider.of<PlaceProvider>(context, listen: false);
     final places = placeProvider.places;
+    final locale = Provider.of<LocalizationProvider>(
+      context,
+      listen: false,
+    ).locale.languageCode;
 
     setState(() {
       if (query.isEmpty) {
         _filteredPlaces = places;
       } else {
         _filteredPlaces = places.where((place) {
-          return place.name.toLowerCase().contains(query.toLowerCase()) ||
+          return place
+                  .localizedName(locale)
+                  .toLowerCase()
+                  .contains(query.toLowerCase()) ||
               place.location.toLowerCase().contains(query.toLowerCase());
         }).toList();
       }
@@ -46,6 +54,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final locale = Provider.of<LocalizationProvider>(
+      context,
+    ).locale.languageCode;
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? AppTheme.backgroundDark
@@ -124,7 +135,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
               title: Text(
-                place.name,
+                place.localizedName(locale),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(

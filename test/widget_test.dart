@@ -9,6 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:vietspots/main.dart';
+import 'package:vietspots/screens/main/main_screen.dart';
+
+import 'test_app.dart';
 
 void main() {
   testWidgets('App launches without crashing', (WidgetTester tester) async {
@@ -25,5 +28,9 @@ void main() {
       find.byType(Scaffold),
       findsWidgets,
     ); // Should find at least one Scaffold
+  });
+  testWidgets('MainScreen renders', (tester) async {
+    await tester.pumpWidget(buildTestApp(const MainScreen()));
+    expect(find.text('VietSpots'), findsWidgets);
   });
 }

@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:vietspots/providers/auth_provider.dart';
 import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/screens/main/search_screen.dart';
+import 'package:vietspots/screens/settings/settings_tree.dart';
 import 'package:vietspots/utils/mock_data.dart';
+import 'package:vietspots/utils/avatar_image_provider.dart';
 import 'package:vietspots/utils/typography.dart';
 import 'package:vietspots/widgets/place_card.dart';
 
@@ -23,7 +25,7 @@ class HomeScreen extends StatelessWidget {
             : Colors.redAccent,
         elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
         title: Text(
-          'VietSpots',
+          locProvider.translate('app_name'),
           style: TextStyle(
             color: Theme.of(context).brightness == Brightness.dark
                 ? Colors.white
@@ -37,7 +39,12 @@ class HomeScreen extends StatelessWidget {
             padding: const EdgeInsets.only(right: 12.0, top: 4.0),
             child: GestureDetector(
               onTap: () {
-                Navigator.pushNamed(context, '/settings');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const GeneralInfoScreen(),
+                  ),
+                );
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -47,9 +54,7 @@ class HomeScreen extends StatelessWidget {
                 child: CircleAvatar(
                   radius: 18,
                   backgroundColor: Colors.white,
-                  backgroundImage: user?.avatarUrl != null
-                      ? NetworkImage(user!.avatarUrl!)
-                      : null,
+                  backgroundImage: avatarImageProvider(user?.avatarUrl),
                   child: user?.avatarUrl == null
                       ? const Icon(
                           Icons.person,
@@ -109,14 +114,26 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSectionHeader(context, 'Có thể bạn sẽ thích'),
-                _buildHorizontalList(MockDataService.places),
+                _buildSectionHeader(
+                  context,
+                  locProvider.translate('recommended_for_you'),
+                ),
+                _buildHorizontalList(context, MockDataService.places),
                 const SizedBox(height: 24),
-                _buildSectionHeader(context, 'Các địa điểm gần bạn'),
-                _buildHorizontalList(MockDataService.district12Places),
+                _buildSectionHeader(
+                  context,
+                  locProvider.translate('nearby_places'),
+                ),
+                _buildHorizontalList(context, MockDataService.district12Places),
                 const SizedBox(height: 24),
-                _buildSectionHeader(context, 'Các địa điểm bạn đã đi'),
-                _buildHorizontalList(MockDataService.places.reversed.toList()),
+                _buildSectionHeader(
+                  context,
+                  locProvider.translate('places_you_visited'),
+                ),
+                _buildHorizontalList(
+                  context,
+                  MockDataService.places.reversed.toList(),
+                ),
               ],
             ),
           ),
@@ -137,16 +154,27 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHorizontalList(List places) {
-    return SizedBox(
-      height: 220,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: places.length,
-        itemBuilder: (context, index) {
-          return PlaceCard(place: places[index]);
-        },
+  Widget _buildHorizontalList(BuildContext context, List places) {
+    // Light background container to make content feel slightly raised.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor.withOpacity(230 / 255),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: SizedBox(
+          height: 220,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: places.length,
+            itemBuilder: (context, index) {
+              return PlaceCard(place: places[index]);
+            },
+          ),
+        ),
       ),
     );
   }

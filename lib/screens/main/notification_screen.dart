@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vietspots/screens/main/notification_detail_screen.dart';
 import 'package:vietspots/utils/typography.dart';
 
 class NotificationScreen extends StatelessWidget {
@@ -124,7 +125,17 @@ class NotificationScreen extends StatelessWidget {
                   ],
                 ),
                 onTap: () {
-                  // Navigate to detail
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NotificationDetailScreen(
+                        title: notif['title'] as String,
+                        subtitle: notif['subtitle'] as String,
+                        time: notif['time'] as String,
+                        isUnread: isUnread,
+                      ),
+                    ),
+                  );
                 },
               ),
             );

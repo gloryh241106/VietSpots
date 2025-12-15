@@ -18,7 +18,8 @@ class AppTheme {
       secondary: accentYellow,
       surface: Colors.white,
     ),
-    textTheme: GoogleFonts.poppinsTextTheme(),
+    // Noto Sans has much better glyph coverage for multi-language UI.
+    textTheme: GoogleFonts.notoSansTextTheme(),
     appBarTheme: const AppBarTheme(
       backgroundColor: primaryRed,
       foregroundColor: Colors.white,
@@ -43,7 +44,7 @@ class AppTheme {
       secondary: accentYellow,
       surface: cardDark,
     ),
-    textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+    textTheme: GoogleFonts.notoSansTextTheme(ThemeData.dark().textTheme),
     appBarTheme: const AppBarTheme(
       backgroundColor: Color(0xFF1E1E1E),
       foregroundColor: Colors.white,

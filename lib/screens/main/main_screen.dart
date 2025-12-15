@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/screens/main/chat_screen.dart';
 import 'package:vietspots/screens/main/favorites_screen.dart';
 import 'package:vietspots/screens/main/home_screen.dart';
@@ -17,8 +19,8 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const NotificationScreen(),
     const FavoritesScreen(),
+    const NotificationScreen(),
     const SettingsScreen(),
   ];
 
@@ -30,64 +32,75 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
+
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _screens),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 16.0),
-        child: Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Colors.redAccent, Colors.pinkAccent],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.redAccent.withValues(alpha: 40 / 255),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: IconButton(
-            icon: const Icon(Icons.smart_toy, color: Colors.white, size: 30),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ChatScreen()),
-              );
-            },
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: BottomAppBar(
-        shape: null,
-        notchMargin: 0,
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8,
         elevation: 8,
         child: SizedBox(
           height: 64,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              Expanded(child: _buildNavItem(Icons.home, 'Home', 0)),
-              Expanded(child: _buildNavItem(Icons.notifications, 'Notify', 1)),
-              Expanded(child: _buildNavItem(Icons.favorite, 'Favorites', 2)),
-              Expanded(child: _buildNavItem(Icons.settings, 'Settings', 3)),
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.home,
+                  label: loc.translate('home'),
+                  tabIndex: 0,
+                ),
+              ),
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.favorite,
+                  label: loc.translate('favorites'),
+                  tabIndex: 1,
+                ),
+              ),
+              const SizedBox(width: 64), // space for FAB
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.notifications,
+                  label: loc.translate('notification'),
+                  tabIndex: 2,
+                ),
+              ),
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.settings,
+                  label: loc.translate('settings'),
+                  tabIndex: 3,
+                ),
+              ),
             ],
           ),
         ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ChatScreen()),
+          );
+        },
+        shape: const CircleBorder(),
+        child: const Icon(Icons.smart_toy),
+      ),
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, int index) {
-    final isSelected = _currentIndex == index;
+  Widget _buildNavItem({
+    required IconData icon,
+    required String label,
+    required int? tabIndex,
+    VoidCallback? onTap,
+  }) {
+    final isSelected = tabIndex != null && _currentIndex == tabIndex;
     return InkWell(
-      onTap: () => _onItemTapped(index),
+      onTap: onTap ?? (tabIndex == null ? null : () => _onItemTapped(tabIndex)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,

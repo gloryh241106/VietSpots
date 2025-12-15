@@ -4,6 +4,7 @@ import 'package:vietspots/providers/auth_provider.dart';
 import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/providers/theme_provider.dart';
 import 'package:vietspots/screens/settings/settings_tree.dart';
+import 'package:vietspots/utils/avatar_image_provider.dart';
 import 'package:vietspots/utils/typography.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -40,7 +41,7 @@ class SettingsScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 50,
-                    backgroundImage: NetworkImage(user.avatarUrl ?? ''),
+                    backgroundImage: avatarImageProvider(user.avatarUrl),
                     onBackgroundImageError: (_, _) {},
                     child: user.avatarUrl == null
                         ? const Icon(Icons.person, size: 50)

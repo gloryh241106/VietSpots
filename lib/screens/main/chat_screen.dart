@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vietspots/models/chat_model.dart';
 import 'package:vietspots/providers/chat_provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/widgets/place_card.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -13,7 +14,9 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
+  final _scrollController = ScrollController();
   bool _isTyping = false;
+  int _lastRenderedItemCount = 0;
 
   void _sendMessage() {
     if (_controller.text.trim().isEmpty) return;
@@ -30,25 +33,57 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _scrollToBottom() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   void _startNewChat() {
+    final loc = Provider.of<LocalizationProvider>(context, listen: false);
     Provider.of<ChatProvider>(context, listen: false).clearMessages();
     Navigator.pop(context);
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('New chat started')));
+    ).showSnackBar(SnackBar(content: Text(loc.translate('new_chat_started'))));
+  }
+
+  String _timeAgo(DateTime dateTime) {
+    final diff = DateTime.now().difference(dateTime);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes} min ago';
+    if (diff.inDays < 1) return '${diff.inHours} hours ago';
+    return '${diff.inDays} days ago';
   }
 
   @override
   Widget build(BuildContext context) {
     final chatProvider = Provider.of<ChatProvider>(context);
+    final loc = Provider.of<LocalizationProvider>(context);
+    final currentItemCount = chatProvider.messages.length + (_isTyping ? 1 : 0);
+    if (currentItemCount != _lastRenderedItemCount && currentItemCount > 0) {
+      _lastRenderedItemCount = currentItemCount;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'VietSpots',
+          chatProvider.activeTitle,
           style: const TextStyle(
             color: Colors.white,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
           ),
         ),
         centerTitle: true,
@@ -63,7 +98,7 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.close, color: Colors.white),
             onPressed: () => Navigator.pop(context),
-            tooltip: 'Close Chat',
+            tooltip: loc.translate('close_chat'),
           ),
         ],
       ),
@@ -71,24 +106,24 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           children: [
             UserAccountsDrawerHeader(
-              accountName: const Text('VietSpots AI'),
-              accountEmail: const Text('Your Personal Travel Assistant'),
+              accountName: Text(loc.translate('ai_name')),
+              accountEmail: Text(loc.translate('ai_subtitle')),
               currentAccountPicture: const CircleAvatar(
-                backgroundImage: NetworkImage('https://picsum.photos/200'),
+                child: Icon(Icons.smart_toy),
               ),
               decoration: BoxDecoration(color: Theme.of(context).primaryColor),
             ),
             ListTile(
               leading: const Icon(Icons.add),
-              title: const Text('New Chat'),
+              title: Text(loc.translate('new_chat')),
               onTap: _startNewChat,
             ),
             const Divider(),
-            const Padding(
-              padding: EdgeInsets.all(16.0),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Text(
-                'History',
-                style: TextStyle(
+                loc.translate('history'),
+                style: const TextStyle(
                   color: Colors.grey,
                   fontWeight: FontWeight.bold,
                 ),
@@ -97,33 +132,89 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.history),
-                    title: const Text('Trip to Da Lat'),
-                    subtitle: const Text('2 days ago'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      // Load history logic
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.history),
-                    title: const Text('Food in District 1'),
-                    subtitle: const Text('5 days ago'),
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.history),
-                    title: const Text('Beaches in Vung Tau'),
-                    subtitle: const Text('1 week ago'),
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                ],
+                children: chatProvider.history.isEmpty
+                    ? [
+                        ListTile(
+                          title: Text(loc.translate('no_conversations_yet')),
+                          subtitle: Text(
+                            loc.translate('start_chatting_history'),
+                          ),
+                        ),
+                      ]
+                    : chatProvider.history.map((conv) {
+                        return ListTile(
+                          leading: const Icon(Icons.history),
+                          title: Text(conv.title),
+                          subtitle: Text(_timeAgo(conv.updatedAt)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Provider.of<ChatProvider>(
+                              context,
+                              listen: false,
+                            ).loadConversation(conv.id);
+                          },
+                          onLongPress: () async {
+                            final choice = await showModalBottomSheet<String>(
+                              context: context,
+                              builder: (ctx) {
+                                return SafeArea(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ListTile(
+                                        title: Text(loc.translate('open')),
+                                        onTap: () => Navigator.pop(ctx, 'open'),
+                                      ),
+                                      ListTile(
+                                        title: Text(loc.translate('share')),
+                                        onTap: () =>
+                                            Navigator.pop(ctx, 'share'),
+                                      ),
+                                      ListTile(
+                                        title: Text(loc.translate('delete')),
+                                        onTap: () =>
+                                            Navigator.pop(ctx, 'delete'),
+                                      ),
+                                      ListTile(
+                                        title: Text(loc.translate('cancel')),
+                                        onTap: () => Navigator.pop(ctx, null),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+
+                            if (choice == 'open') {
+                              Navigator.pop(context);
+                              Provider.of<ChatProvider>(
+                                context,
+                                listen: false,
+                              ).loadConversation(conv.id);
+                            } else if (choice == 'share') {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    loc.translate('share_not_implemented'),
+                                  ),
+                                ),
+                              );
+                            } else if (choice == 'delete') {
+                              Provider.of<ChatProvider>(
+                                context,
+                                listen: false,
+                              ).deleteConversation(conv.id);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    loc.translate('conversation_deleted'),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        );
+                      }).toList(),
               ),
             ),
           ],
@@ -131,7 +222,6 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
-          const SizedBox(height: 16),
           Expanded(
             child: chatProvider.messages.isEmpty && !_isTyping
                 ? Center(
@@ -144,9 +234,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             width: 80,
                             height: 80,
                             decoration: BoxDecoration(
-                              color: Colors.redAccent.withValues(
-                                alpha: 25 / 255,
-                              ),
+                              color: Colors.redAccent.withOpacity(25 / 255),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -156,16 +244,16 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          const Text(
-                            'Xin chào Glory H! 👋',
-                            style: TextStyle(
+                          Text(
+                            loc.translate('chat_greeting'),
+                            style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Tôi là trợ lý ảo VietSpots.\nBạn cần tìm địa điểm nào?',
+                            loc.translate('chat_intro'),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 15,
@@ -178,97 +266,102 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   )
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount:
                         chatProvider.messages.length + (_isTyping ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == chatProvider.messages.length && _isTyping) {
-                        return _buildTypingIndicator();
+                        return _buildTypingIndicator(context);
                       }
                       final msg = chatProvider.messages[index];
                       return _buildMessageBubble(msg);
                     },
                   ),
           ),
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color.fromRGBO(0, 0, 0, 0.1),
-                  offset: const Offset(0, -2),
-                  blurRadius: 8,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[850]?.withValues(alpha: 128 / 255)
-                          : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
+          // SafeArea keeps the input above Android system navigation buttons.
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color.fromRGBO(0, 0, 0, 0.1),
+                    offset: const Offset(0, -2),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
                         color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey[800]!.withValues(alpha: 102 / 255)
-                            : Colors.grey[300]!,
-                        width: 1,
+                            ? Colors.grey[850]?.withOpacity(128 / 255)
+                            : Colors.grey[200],
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey[800]!.withOpacity(102 / 255)
+                              : Colors.grey[300]!,
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color.fromRGBO(0, 0, 0, 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
+                      child: TextField(
+                        controller: _controller,
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: loc.translate('chat_hint'),
+                          hintStyle: TextStyle(
+                            color: Theme.of(context).textTheme.bodyLarge?.color
+                                ?.withOpacity(128 / 255),
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.redAccent, Colors.pinkAccent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color.fromRGBO(0, 0, 0, 0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+                          color: Colors.redAccent.withOpacity(77 / 255),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: TextField(
-                      controller: _controller,
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Ask VietSpots...',
-                        hintStyle: TextStyle(
-                          color: Theme.of(context).textTheme.bodyLarge?.color
-                              ?.withValues(alpha: 128 / 255),
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 14,
-                        ),
-                      ),
-                      onSubmitted: (_) => _sendMessage(),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed: _sendMessage,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Colors.redAccent, Colors.pinkAccent],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.redAccent.withValues(alpha: 77 / 255),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: _sendMessage,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -276,7 +369,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildTypingIndicator() {
+  Widget _buildTypingIndicator(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context, listen: false);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -308,7 +402,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Row(
               children: [
                 Text(
-                  'VietSpots is typing',
+                  loc.translate('typing'),
                   style: TextStyle(color: Colors.grey[600], fontSize: 14),
                 ),
                 const SizedBox(width: 8),
@@ -391,7 +485,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     _formatTimestamp(msg.timestamp),
                     style: TextStyle(
                       color: isUser
-                          ? Colors.white.withValues(alpha: 0.7)
+                          ? Colors.white.withOpacity(0.7)
                           : Colors.grey[600],
                       fontSize: 11,
                     ),

@@ -29,16 +29,21 @@ class VietSpotsApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
-          return MaterialApp(
-            title: 'VietSpots',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeProvider.themeMode,
-            home: const SplashScreen(),
-            routes: {
-              '/home': (context) => const MainScreen(),
-              '/login': (context) => const LoginScreen(),
+          return Consumer<LocalizationProvider>(
+            builder: (context, locProvider, child) {
+              return MaterialApp(
+                title: locProvider.translate('app_name'),
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.lightTheme,
+                darkTheme: AppTheme.darkTheme,
+                themeMode: themeProvider.themeMode,
+                locale: locProvider.locale,
+                home: const SplashScreen(),
+                routes: {
+                  '/home': (context) => const MainScreen(),
+                  '/login': (context) => const LoginScreen(),
+                },
+              );
             },
           );
         },

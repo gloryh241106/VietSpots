@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/providers/place_provider.dart';
 import 'package:vietspots/screens/detail/place_detail_screen.dart';
 import 'package:vietspots/utils/typography.dart';
@@ -10,6 +11,8 @@ class FavoritesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
+    final locale = loc.locale.languageCode;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
@@ -17,7 +20,7 @@ class FavoritesScreen extends StatelessWidget {
             : Colors.redAccent,
         elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
         title: Text(
-          'Favorites',
+          loc.translate('favorites_title'),
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
@@ -36,22 +39,18 @@ class FavoritesScreen extends StatelessWidget {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).primaryColor.withValues(alpha: 0.1),
+                        color: Theme.of(context).primaryColor.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.favorite_border,
                         size: 64,
-                        color: Theme.of(
-                          context,
-                        ).primaryColor.withValues(alpha: 0.6),
+                        color: Theme.of(context).primaryColor.withOpacity(0.6),
                       ),
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'No favorites yet',
+                      loc.translate('no_favorites_yet'),
                       style: AppTypography.heading3.copyWith(
                         color: AppTextColors.primary(context),
                       ),
@@ -71,7 +70,7 @@ class FavoritesScreen extends StatelessWidget {
                         Navigator.of(context).pushReplacementNamed('/home');
                       },
                       icon: const Icon(Icons.explore),
-                      label: const Text('Explore Places'),
+                      label: Text(loc.translate('explore_places')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
@@ -139,7 +138,7 @@ class FavoritesScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  place.name,
+                                  place.localizedName(locale),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
@@ -175,8 +174,42 @@ class FavoritesScreen extends StatelessWidget {
                               Icons.delete_outline,
                               color: Colors.red,
                             ),
-                            onPressed: () {
-                              placeProvider.toggleFavorite(place.id);
+                            onPressed: () async {
+                              final shouldDelete =
+                                  await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) {
+                                      return AlertDialog(
+                                        title: Text(
+                                          loc.translate(
+                                            'remove_favorite_title',
+                                          ),
+                                        ),
+                                        content: Text(
+                                          loc.translate('remove_favorite_body'),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, false),
+                                            child: Text(
+                                              loc.translate('cancel'),
+                                            ),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, true),
+                                            child: Text(loc.translate('yes')),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ) ??
+                                  false;
+
+                              if (shouldDelete) {
+                                placeProvider.toggleFavorite(place.id);
+                              }
                             },
                           ),
                         ],

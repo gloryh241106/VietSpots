@@ -1,6 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:vietspots/models/place_model.dart';
+import 'package:provider/provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
+import 'package:vietspots/providers/place_provider.dart';
 import 'package:vietspots/screens/detail/place_detail_screen.dart';
 import 'package:vietspots/utils/typography.dart';
 
@@ -13,6 +16,13 @@ class PlaceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final loc = Provider.of<LocalizationProvider>(context);
+    final locale = loc.locale.languageCode;
+    final placeProvider = Provider.of<PlaceProvider>(context, listen: false);
+    final currentPlace = placeProvider.places.firstWhere(
+      (p) => p.id == place.id,
+      orElse: () => place,
+    );
 
     return GestureDetector(
       onTap: () {
@@ -32,7 +42,7 @@ class PlaceCard extends StatelessWidget {
           border: isDark ? Border.all(color: Colors.white24, width: 1) : null,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 20 / 255),
+              color: Colors.black.withOpacity(20 / 255),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -71,7 +81,7 @@ class PlaceCard extends StatelessWidget {
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                         colors: [
-                          Colors.black.withValues(alpha: 89 / 255),
+                          Colors.black.withOpacity(89 / 255),
                           Colors.transparent,
                         ],
                       ),
@@ -89,7 +99,7 @@ class PlaceCard extends StatelessWidget {
                 children: [
                   // TITLE
                   Text(
-                    place.name,
+                    place.localizedName(locale),
                     style: AppTypography.titleMedium.copyWith(
                       fontSize: 17,
                       height: 1.2,
@@ -131,13 +141,15 @@ class PlaceCard extends StatelessWidget {
 
                       const SizedBox(width: 6),
 
-                      Text(
-                        '${place.commentCount} reviews',
-                        style: AppTypography.bodySmall.copyWith(
-                          color: AppTextColors.secondary(context),
+                      Expanded(
+                        child: Text(
+                          '${currentPlace.comments.isNotEmpty ? currentPlace.comments.length : currentPlace.commentCount} ${loc.translate('reviews')}',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: AppTextColors.secondary(context),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
