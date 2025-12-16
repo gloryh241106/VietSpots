@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:vietspots/providers/auth_provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
@@ -64,10 +64,9 @@ class _PermissionsScreenState extends State<PermissionsScreen>
 
   void _onGetStarted() async {
     if (!_locationGranted) {
+      final loc = Provider.of<LocalizationProvider>(context, listen: false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Location permission is required to continue.'),
-        ),
+        SnackBar(content: Text(loc.translate('location_required_to_continue'))),
       );
       return;
     }
@@ -81,7 +80,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     }
 
     if (mounted) {
-      print('Navigating to Home...');
+      debugPrint('Navigating to Home...');
       // Use pushNamedAndRemoveUntil to clear the back stack (Login, Register, etc.)
       Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     }
@@ -89,6 +88,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -99,24 +99,24 @@ class _PermissionsScreenState extends State<PermissionsScreen>
               const Icon(Icons.location_on, size: 80, color: Colors.red),
               const SizedBox(height: 24),
               Text(
-                'Permissions Required',
+                loc.translate('permissions_required_title'),
                 style: Theme.of(context).textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'To provide the best travel recommendations, we need access to your location.',
+              Text(
+                loc.translate('permissions_required_desc'),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
               ListTile(
                 leading: const Icon(Icons.my_location),
-                title: const Text('Location (Required)'),
+                title: Text(loc.translate('location_required')),
                 trailing: _locationGranted
                     ? const Icon(Icons.check_circle, color: Colors.green)
                     : ElevatedButton(
                         onPressed: _requestLocation,
-                        child: const Text('Allow'),
+                        child: Text(loc.translate('allow')),
                       ),
               ),
               const SizedBox(height: 40),
@@ -130,7 +130,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                         ? Theme.of(context).primaryColor
                         : Colors.grey,
                   ),
-                  child: const Text('Get Started'),
+                  child: Text(loc.translate('get_started')),
                 ),
               ),
             ],

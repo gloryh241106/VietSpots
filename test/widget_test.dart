@@ -9,22 +9,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:vietspots/main.dart';
+import 'package:vietspots/screens/main/main_screen.dart';
+
+import 'test_app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  testWidgets('App launches without crashing', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const VietSpotsApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Wait for app to settle
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify that the app has loaded (check for common elements)
+    // Since it's a travel app, check for some basic UI elements
+    expect(find.byType(MaterialApp), findsOneWidget);
+    expect(
+      find.byType(Scaffold),
+      findsWidgets,
+    ); // Should find at least one Scaffold
+  });
+  testWidgets('MainScreen renders', (tester) async {
+    await tester.pumpWidget(buildTestApp(const MainScreen()));
+    expect(find.text('VietSpots'), findsWidgets);
   });
 }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/screens/auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -15,7 +17,7 @@ class _SplashScreenState extends State<SplashScreen> {
     _navigateToLogin();
   }
 
-  _navigateToLogin() async {
+  Future<void> _navigateToLogin() async {
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) {
       Navigator.pushReplacement(
@@ -27,6 +29,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
       backgroundColor: Theme.of(context).primaryColor,
       body: Center(
@@ -39,16 +42,17 @@ class _SplashScreenState extends State<SplashScreen> {
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.travel_explore,
-                size: 80,
-                color: Theme.of(context).primaryColor,
+              child: Image.asset(
+                'assets/icons/vietspots_full_icon.png',
+                width: 80,
+                height: 80,
+                fit: BoxFit.contain,
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'VietSpots',
-              style: TextStyle(
+            Text(
+              loc.translate('app_name'),
+              style: const TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,

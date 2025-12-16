@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/screens/main/chat_screen.dart';
 import 'package:vietspots/screens/main/favorites_screen.dart';
 import 'package:vietspots/screens/main/home_screen.dart';
@@ -17,8 +19,8 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const NotificationScreen(),
     const FavoritesScreen(),
+    const NotificationScreen(),
     const SettingsScreen(),
   ];
 
@@ -30,8 +32,53 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
+
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _screens),
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8,
+        elevation: 8,
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.home,
+                  label: loc.translate('home'),
+                  tabIndex: 0,
+                ),
+              ),
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.favorite,
+                  label: loc.translate('favorites'),
+                  tabIndex: 1,
+                ),
+              ),
+              const SizedBox(width: 64), // space for FAB
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.notifications,
+                  label: loc.translate('notification'),
+                  tabIndex: 2,
+                ),
+              ),
+              Expanded(
+                child: _buildNavItem(
+                  icon: Icons.settings,
+                  label: loc.translate('settings'),
+                  tabIndex: 3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
@@ -39,47 +86,36 @@ class _MainScreenState extends State<MainScreen> {
             MaterialPageRoute(builder: (context) => const ChatScreen()),
           );
         },
-        backgroundColor: Colors.redAccent,
         shape: const CircleBorder(),
-        elevation: 4.0,
-        child: const Icon(Icons.chat_bubble, color: Colors.white),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8.0,
-        child: SizedBox(
-          height: 60,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(Icons.home, 'Home', 0),
-              _buildNavItem(Icons.notifications, 'Notify', 1),
-              const SizedBox(width: 40), // Space for FAB
-              _buildNavItem(Icons.favorite, 'Favorites', 2),
-              _buildNavItem(Icons.settings, 'Settings', 3),
-            ],
-          ),
-        ),
+        child: const Icon(Icons.smart_toy),
       ),
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, int index) {
-    final isSelected = _currentIndex == index;
+  Widget _buildNavItem({
+    required IconData icon,
+    required String label,
+    required int? tabIndex,
+    VoidCallback? onTap,
+  }) {
+    final isSelected = tabIndex != null && _currentIndex == tabIndex;
     return InkWell(
-      onTap: () => _onItemTapped(index),
+      onTap: onTap ?? (tabIndex == null ? null : () => _onItemTapped(tabIndex)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             icon,
+            size: 26,
             color: isSelected ? Theme.of(context).primaryColor : Colors.grey,
           ),
+          const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               color: isSelected ? Theme.of(context).primaryColor : Colors.grey,
             ),
           ),

@@ -1,75 +1,149 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
+import 'package:vietspots/screens/main/notification_detail_screen.dart';
+import 'package:vietspots/utils/typography.dart';
 
 class NotificationScreen extends StatelessWidget {
   const NotificationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     final notifications = [
       {
-        'title': 'System Update',
-        'subtitle': 'VietSpots 2.0 is now available with new AI features!',
-        'time': '2 hours ago',
+        'title': loc.translate('notif_system_update_title'),
+        'subtitle': loc.translate('notif_system_update_subtitle'),
+        'time': loc.translate('notif_system_update_time'),
         'isUnread': true,
       },
       {
-        'title': 'New Suggestion',
-        'subtitle': 'Based on your recent trip to Da Lat, you might like...',
-        'time': '1 day ago',
+        'title': loc.translate('notif_new_suggestion_title'),
+        'subtitle': loc.translate('notif_new_suggestion_subtitle'),
+        'time': loc.translate('notif_new_suggestion_time'),
         'isUnread': false,
       },
       {
-        'title': 'Welcome to VietSpots',
-        'subtitle': 'Thanks for joining our community of travelers.',
-        'time': '3 days ago',
+        'title': loc.translate('notif_welcome_title'),
+        'subtitle': loc.translate('notif_welcome_subtitle'),
+        'time': loc.translate('notif_welcome_time'),
         'isUnread': false,
       },
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
-      body: ListView.separated(
-        itemCount: notifications.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          final notif = notifications[index];
-          final isUnread = notif['isUnread'] as bool;
-
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: isUnread
-                  ? Colors.red.withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.1),
-              child: Icon(
-                isUnread
-                    ? Icons.notifications_active
-                    : Icons.notifications_none,
-                color: isUnread ? Colors.red : Colors.grey,
-              ),
-            ),
-            title: Text(
-              notif['title'] as String,
-              style: TextStyle(
-                fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Text(notif['subtitle'] as String),
-                const SizedBox(height: 4),
-                Text(
-                  notif['time'] as String,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            onTap: () {
-              // Navigate to detail
-            },
-          );
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1E1E1E)
+            : Colors.redAccent,
+        elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
+        title: Text(
+          loc.translate('notifications'),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await Future.delayed(const Duration(seconds: 1));
         },
+        child: ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: notifications.length,
+          separatorBuilder: (context, index) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final notif = notifications[index];
+            final isUnread = notif['isUnread'] as bool;
+
+            return Container(
+              color: isUnread
+                  ? Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF1A1212)
+                        : const Color(0xFFFFF0F0)
+                  : Colors.transparent,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8.0,
+                ),
+                leading: Stack(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: isUnread
+                          ? Theme.of(
+                              context,
+                            ).primaryColor.withValues(alpha: 0.1)
+                          : Colors.grey.withValues(alpha: 0.1),
+                      child: Icon(
+                        isUnread
+                            ? Icons.notifications_active
+                            : Icons.notifications_none,
+                        color: isUnread
+                            ? Theme.of(context).primaryColor
+                            : Colors.grey,
+                      ),
+                    ),
+                    if (isUnread)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                title: Text(
+                  notif['title'] as String,
+                  style: AppTypography.titleLarge.copyWith(
+                    fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal,
+                    color: AppTextColors.primary(context),
+                  ),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text(
+                      notif['subtitle'] as String,
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: AppTextColors.secondary(context),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      notif['time'] as String,
+                      style: AppTypography.caption.copyWith(
+                        color: AppTextColors.tertiary(context),
+                      ),
+                    ),
+                  ],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NotificationDetailScreen(
+                        title: notif['title'] as String,
+                        subtitle: notif['subtitle'] as String,
+                        time: notif['time'] as String,
+                        isUnread: isUnread,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
     );
   }

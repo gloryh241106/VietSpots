@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vietspots/providers/localization_provider.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -12,24 +14,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Forgot Password')),
+      appBar: AppBar(title: Text(loc.translate('forgot_password_title'))),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Enter your email address to receive a verification code.',
-              style: TextStyle(fontSize: 16),
+            Text(
+              loc.translate('forgot_password_desc'),
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             TextField(
               controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.email),
+              decoration: InputDecoration(
+                labelText: loc.translate('email'),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.email),
               ),
             ),
             const SizedBox(height: 24),
@@ -43,7 +46,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                 );
               },
-              child: const Text('Send Code'),
+              child: Text(loc.translate('send_code')),
             ),
           ],
         ),
@@ -65,24 +68,25 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Verify Code')),
+      appBar: AppBar(title: Text(loc.translate('verify_code_title'))),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Code sent to ${widget.email}',
+              '${loc.translate('code_sent_to')} ${widget.email}',
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             TextField(
               controller: _codeController,
-              decoration: const InputDecoration(
-                labelText: 'OTP Code',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock_clock),
+              decoration: InputDecoration(
+                labelText: loc.translate('otp_code'),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock_clock),
               ),
               keyboardType: TextInputType.number,
             ),
@@ -96,7 +100,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
                   ),
                 );
               },
-              child: const Text('Verify'),
+              child: Text(loc.translate('verify')),
             ),
           ],
         ),
@@ -120,8 +124,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset Password')),
+      appBar: AppBar(title: Text(loc.translate('reset_password_title'))),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -131,7 +136,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               controller: _newPassController,
               obscureText: _obscureNew,
               decoration: InputDecoration(
-                labelText: 'New Password',
+                labelText: loc.translate('new_password'),
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.lock),
                 suffixIcon: IconButton(
@@ -147,7 +152,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               controller: _confirmPassController,
               obscureText: _obscureConfirm,
               decoration: InputDecoration(
-                labelText: 'Confirm New Password',
+                labelText: loc.translate('confirm_new_password'),
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
@@ -163,13 +168,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ElevatedButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password changed successfully'),
+                  SnackBar(
+                    content: Text(loc.translate('password_changed_success')),
                   ),
                 );
                 Navigator.of(context).popUntil((route) => route.isFirst);
               },
-              child: const Text('Change Password'),
+              child: Text(loc.translate('change_password')),
             ),
           ],
         ),

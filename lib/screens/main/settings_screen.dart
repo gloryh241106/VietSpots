@@ -4,6 +4,8 @@ import 'package:vietspots/providers/auth_provider.dart';
 import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/providers/theme_provider.dart';
 import 'package:vietspots/screens/settings/settings_tree.dart';
+import 'package:vietspots/utils/avatar_image_provider.dart';
+import 'package:vietspots/utils/typography.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -18,8 +20,17 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(locProvider.translate('settings')),
-        elevation: 0,
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1E1E1E)
+            : Colors.redAccent,
+        elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
+        title: Text(
+          locProvider.translate('settings'),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -30,8 +41,8 @@ class SettingsScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 50,
-                    backgroundImage: NetworkImage(user.avatarUrl ?? ''),
-                    onBackgroundImageError: (_, __) {},
+                    backgroundImage: avatarImageProvider(user.avatarUrl),
+                    onBackgroundImageError: (_, _) {},
                     child: user.avatarUrl == null
                         ? const Icon(Icons.person, size: 50)
                         : null,
@@ -39,27 +50,30 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text(
                     user.name,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: AppTypography.titleLarge.copyWith(
+                      color: AppTextColors.primary(context),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     user.email,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppTextColors.secondary(context),
+                    ),
                   ),
                 ],
               ),
             ),
           const SizedBox(height: 32),
-          _buildSectionHeader(context, 'Personal Information'),
+          _buildSectionHeader(
+            context,
+            locProvider.translate('settings_section_personal_information'),
+          ),
           _buildSettingsCard(context, [
             _buildSettingsTile(
               context,
               icon: Icons.person_outline,
-              title: 'General Information',
+              title: locProvider.translate('general_information'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -71,7 +85,7 @@ class SettingsScreen extends StatelessWidget {
             _buildSettingsTile(
               context,
               icon: Icons.lock_outline,
-              title: 'Private Information',
+              title: locProvider.translate('private_information'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -81,12 +95,15 @@ class SettingsScreen extends StatelessWidget {
             ),
           ]),
           const SizedBox(height: 24),
-          _buildSectionHeader(context, 'Security & Permissions'),
+          _buildSectionHeader(
+            context,
+            locProvider.translate('settings_section_security_permissions'),
+          ),
           _buildSettingsCard(context, [
             _buildSettingsTile(
               context,
               icon: Icons.password,
-              title: 'Change Password',
+              title: locProvider.translate('change_password'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -98,7 +115,7 @@ class SettingsScreen extends StatelessWidget {
             _buildSettingsTile(
               context,
               icon: Icons.security_outlined,
-              title: 'Permissions',
+              title: locProvider.translate('permissions'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -108,7 +125,10 @@ class SettingsScreen extends StatelessWidget {
             ),
           ]),
           const SizedBox(height: 24),
-          _buildSectionHeader(context, 'General'),
+          _buildSectionHeader(
+            context,
+            locProvider.translate('settings_section_general'),
+          ),
           _buildSettingsCard(context, [
             _buildSettingsTile(
               context,
@@ -132,12 +152,15 @@ class SettingsScreen extends StatelessWidget {
             ),
           ]),
           const SizedBox(height: 24),
-          _buildSectionHeader(context, 'About'),
+          _buildSectionHeader(
+            context,
+            locProvider.translate('settings_section_about'),
+          ),
           _buildSettingsCard(context, [
             _buildSettingsTile(
               context,
               icon: Icons.help_outline,
-              title: 'Help Center',
+              title: locProvider.translate('help_center'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -149,7 +172,7 @@ class SettingsScreen extends StatelessWidget {
             _buildSettingsTile(
               context,
               icon: Icons.policy_outlined,
-              title: 'Legal Policy',
+              title: locProvider.translate('legal_policy'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -242,7 +265,7 @@ class SettingsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: const Color.fromRGBO(0, 0, 0, 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -261,15 +284,27 @@ class SettingsScreen extends StatelessWidget {
     Color? titleColor,
     Color? iconColor,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: (iconColor ?? Theme.of(context).primaryColor).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: iconColor ?? Theme.of(context).primaryColor),
-      ),
+      leading: isDark
+          ? Icon(
+              icon,
+              color: iconColor ?? Theme.of(context).primaryColor,
+              size: 28,
+            )
+          : Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (iconColor ?? Theme.of(context).primaryColor).withValues(
+                  alpha: 25 / 255,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: iconColor ?? Theme.of(context).primaryColor,
+              ),
+            ),
       title: Text(
         title,
         style: TextStyle(fontWeight: FontWeight.w500, color: titleColor),
