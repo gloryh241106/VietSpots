@@ -5,7 +5,8 @@ import 'package:http/http.dart' as http;
 /// Base API configuration
 class ApiConfig {
   static const String baseUrl =
-      'https://vietspotbackend-production.up.railway.app/api';
+      'http://127.0.0.1:8000/api';
+      //'https://vietspotbackend-production.up.railway.app/api';
   static const Duration timeout = Duration(seconds: 30);
 }
 
@@ -47,6 +48,7 @@ class ApiException implements Exception {
 class ApiService {
   final http.Client _client;
   String? _userId;
+  String? _accessToken;
 
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -55,11 +57,17 @@ class ApiService {
     _userId = userId;
   }
 
+  /// Set access token for authenticated requests
+  void setAccessToken(String? token) {
+    _accessToken = token;
+  }
+
   /// Common headers
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     if (_userId != null) 'X-User-ID': _userId!,
+    if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
   };
 
   /// GET request

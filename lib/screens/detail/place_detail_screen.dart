@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'package:provider/provider.dart';
 import 'package:vietspots/models/place_model.dart';
+import 'package:vietspots/providers/auth_provider.dart';
 import 'package:vietspots/providers/place_provider.dart';
 import 'package:vietspots/screens/detail/directions_map_screen.dart';
 import 'package:image_picker/image_picker.dart';
@@ -584,34 +585,60 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
     });
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final loc = Provider.of<LocalizationProvider>(context, listen: false);
     if (_controller.text.trim().isEmpty) {
       setState(() => _showError = true);
       return;
     }
 
-    final comment = PlaceComment(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      author: 'You',
-      rating: _rating,
-      text: _controller.text.trim(),
-      imagePath: _image?.path,
-      timestamp: DateTime.now(),
-    );
+    // Capture providers before async gap
+    final api = Provider.of<ApiService>(context, listen: false);
+    final placeProvider = Provider.of<PlaceProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userName = authProvider.user?.name ?? 'Anonymous';
+    
+    // Post comment to server
+    try {
+      final service = CommentService(api);
+      
+      await service.createComment(
+        placeId: widget.placeId,
+        authorName: userName,
+        rating: _rating,
+        text: _controller.text.trim(),
+        // TODO: Upload image to server if _image is not null
+        imageUrls: [],
+      );
 
-    Provider.of<PlaceProvider>(
-      context,
-      listen: false,
-    ).addComment(widget.placeId, comment);
+      // Also add to local state for immediate UI update
+      final comment = PlaceComment(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        author: userName,
+        rating: _rating,
+        text: _controller.text.trim(),
+        imagePath: _image?.path,
+        timestamp: DateTime.now(),
+      );
 
-    Navigator.pop(context);
-    // Use the original page context for SnackBar.
-    // The bottom sheet context is disposed immediately after pop.
-    if (widget.rootContext.mounted) {
-      ScaffoldMessenger.of(
-        widget.rootContext,
-      ).showSnackBar(SnackBar(content: Text(loc.translate('review_added'))));
+      placeProvider.addComment(widget.placeId, comment);
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      // Use the original page context for SnackBar.
+      // The bottom sheet context is disposed immediately after pop.
+      if (widget.rootContext.mounted) {
+        ScaffoldMessenger.of(
+          widget.rootContext,
+        ).showSnackBar(SnackBar(content: Text(loc.translate('review_added'))));
+      }
+    } catch (e) {
+      // Handle error
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to post comment: $e')),
+      );
     }
   }
 
