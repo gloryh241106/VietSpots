@@ -313,7 +313,7 @@ class PlaceProvider extends ChangeNotifier {
     // compute score = 0.6*rating_norm + 0.4*(1 - dist_norm)
     final maxDistanceKm = 100.0; // cap distance normalization
 
-    double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    double distanceKm(double lat1, double lon1, double lat2, double lon2) {
       // Haversine formula
       const R = 6371.0; // km
       double toRad(double deg) => deg * (3.141592653589793 / 180.0);
@@ -330,7 +330,7 @@ class PlaceProvider extends ChangeNotifier {
       final ratingNorm = (p.rating / 5.0).clamp(0.0, 1.0);
       double distScore = 0.0;
       if (userLat.isNaN == false && userLon.isNaN == false) {
-        final d = _distanceKm(userLat, userLon, p.latitude, p.longitude);
+        final d = distanceKm(userLat, userLon, p.latitude, p.longitude);
         final dNorm = (d / maxDistanceKm).clamp(0.0, 1.0);
         distScore = 1.0 - dNorm; // nearer -> higher
       }

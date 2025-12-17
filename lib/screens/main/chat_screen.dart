@@ -96,10 +96,14 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: chatProvider.messages.isEmpty
                 ? null
                 : () async {
+                    // capture providers and messenger to avoid using BuildContext after await
+                    final cp = chatProvider;
+                    final messenger = ScaffoldMessenger.of(context);
+
                     final title = await showDialog<String>(
                       context: context,
                       builder: (ctx) {
-                        final controller = TextEditingController(text: chatProvider.activeTitle);
+                        final controller = TextEditingController(text: cp.activeTitle);
                         return AlertDialog(
                           title: Text(loc.translate('save_itinerary')),
                           content: TextField(
@@ -120,8 +124,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       },
                     );
                     if (title != null && title.trim().isNotEmpty) {
-                      final ok = await Provider.of<ChatProvider>(context, listen: false).saveActiveItinerary(title.trim());
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      final ok = await cp.saveActiveItinerary(title.trim());
+                      messenger.showSnackBar(SnackBar(
                         content: Text(ok ? loc.translate('itinerary_saved') : loc.translate('itinerary_save_failed')),
                       ));
                     }
