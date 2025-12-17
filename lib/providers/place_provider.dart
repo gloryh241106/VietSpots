@@ -4,6 +4,7 @@ import 'package:vietspots/models/place_model.dart';
 import 'package:vietspots/services/place_service.dart';
 import 'package:vietspots/services/api_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PlaceProvider extends ChangeNotifier {
@@ -65,25 +66,7 @@ class PlaceProvider extends ChangeNotifier {
         desiredAccuracy: LocationAccuracy.medium,
       );
 
-      // EMULATOR FIX: Override with Vietnam location for testing
-      // Remove this in production!
-      if (_userPosition!.latitude < 0 || _userPosition!.latitude > 40) {
-        debugPrint(
-          '⚠️ Detected emulator location, using Ho Chi Minh City coordinates for testing',
-        );
-        _userPosition = Position(
-          latitude: 10.8231,
-          longitude: 106.6297,
-          timestamp: DateTime.now(),
-          accuracy: 100,
-          altitude: 0,
-          heading: 0,
-          speed: 0,
-          speedAccuracy: 0,
-          altitudeAccuracy: 0,
-          headingAccuracy: 0,
-        );
-      }
+      // NOTE: Removed emulator latitude override. Do not override real user coordinates.
 
       debugPrint(
         'Got location: ${_userPosition?.latitude}, ${_userPosition?.longitude}',
@@ -215,17 +198,8 @@ class PlaceProvider extends ChangeNotifier {
 
       _places = allPlaces;
 
-      // Sort by rating (highest first), then by comment count as secondary
-      final sortedByRating = List<Place>.from(_places)
-        ..sort((a, b) {
-          // Primary: rating descending
-          final ratingCompare = b.rating.compareTo(a.rating);
-          if (ratingCompare != 0) return ratingCompare;
-          // Secondary: comment count descending
-          return b.commentCount.compareTo(a.commentCount);
-        });
-
-      _recommendedPlaces = sortedByRating.take(10).toList();
+      // Recommended: rank by combined score (rating + proximity) for better relevance
+      _recommendedPlaces = _rankPlaces(_places).take(10).toList();
       debugPrint('Recommended places: ${_recommendedPlaces.length}');
 
       // Load nearby places if we have location
@@ -327,5 +301,44 @@ class PlaceProvider extends ChangeNotifier {
       sorted.sort((a, b) => b.commentCount.compareTo(a.commentCount));
       return sorted;
     }
+  }
+
+  // Minimal ranking combining rating and distance to improve relevance.
+  List<Place> _rankPlaces(List<Place> places) {
+    if (places.isEmpty) return [];
+
+    double userLat = _userPosition?.latitude ?? double.nan;
+    double userLon = _userPosition?.longitude ?? double.nan;
+
+    // compute score = 0.6*rating_norm + 0.4*(1 - dist_norm)
+    final maxDistanceKm = 100.0; // cap distance normalization
+
+    double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+      // Haversine formula
+      const R = 6371.0; // km
+      double toRad(double deg) => deg * (3.141592653589793 / 180.0);
+      final dLat = toRad(lat2 - lat1);
+      final dLon = toRad(lon2 - lon1);
+      final a =
+          (sin(dLat / 2) * sin(dLat / 2)) +
+          cos(toRad(lat1)) * cos(toRad(lat2)) * (sin(dLon / 2) * sin(dLon / 2));
+      final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+      return R * c;
+    }
+
+    final scored = places.map((p) {
+      final ratingNorm = (p.rating / 5.0).clamp(0.0, 1.0);
+      double distScore = 0.0;
+      if (userLat.isNaN == false && userLon.isNaN == false) {
+        final d = _distanceKm(userLat, userLon, p.latitude, p.longitude);
+        final dNorm = (d / maxDistanceKm).clamp(0.0, 1.0);
+        distScore = 1.0 - dNorm; // nearer -> higher
+      }
+      final score = 0.6 * ratingNorm + 0.4 * distScore;
+      return {'place': p, 'score': score};
+    }).toList();
+
+    scored.sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
+    return scored.map((e) => e['place'] as Place).toList();
   }
 }

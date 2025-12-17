@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:vietspots/models/chat_model.dart';
 import 'package:vietspots/services/chat_service.dart';
 import 'package:vietspots/services/place_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatConversation {
   ChatConversation({
@@ -34,6 +36,7 @@ class ChatProvider with ChangeNotifier {
 
   ChatProvider(this._chatService, this._placeService) {
     _getUserLocation();
+    _loadHistory();
   }
 
   bool get isLoading => _isLoading;
@@ -71,6 +74,7 @@ class ChatProvider with ChangeNotifier {
       }
       _history.removeAt(idx);
       notifyListeners();
+      _saveHistory();
     }
   }
 
@@ -101,6 +105,7 @@ class ChatProvider with ChangeNotifier {
 
     _activeConversationId = id;
     _history.insert(0, conv);
+    _saveHistory();
     return conv;
   }
 
@@ -127,6 +132,9 @@ class ChatProvider with ChangeNotifier {
 
     _messages.add(userMsg);
     notifyListeners();
+
+    // Persist history after user message
+    _saveHistory();
 
     // Call real backend API
     _generateBotResponse(text);
@@ -216,6 +224,8 @@ class ChatProvider with ChangeNotifier {
       }
 
       _messages.add(botMsg);
+      // persist after bot response
+      _saveHistory();
     } catch (e) {
       // Debug: Log the actual error
       debugPrint('❌ Chat API Error: $e');
@@ -248,6 +258,7 @@ class ChatProvider with ChangeNotifier {
           }
         }
         _messages.add(fallbackMsg);
+        await _saveHistory();
       } catch (e2) {
         // Fallback to error message
         String errorText = 'Xin lỗi, tôi gặp vấn đề khi xử lý yêu cầu của bạn.';
@@ -278,10 +289,97 @@ class ChatProvider with ChangeNotifier {
         }
 
         _messages.add(errorMsg);
+        await _saveHistory();
       }
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // Persist _history to SharedPreferences as JSON
+  Future<void> _saveHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final payload = jsonEncode(_history.map((conv) => {
+            'id': conv.id,
+            'title': conv.title,
+            'createdAt': conv.createdAt.toIso8601String(),
+            'updatedAt': conv.updatedAt.toIso8601String(),
+            'messages': conv.messages
+                .map((m) => {
+                      'id': m.id,
+                      'text': m.text,
+                      'isUser': m.isUser,
+                      'timestamp': m.timestamp.toIso8601String(),
+                    })
+                .toList(),
+          }).toList());
+      await prefs.setString('chat_history_v1', payload);
+    } catch (e) {
+      debugPrint('Failed to save chat history: $e');
+    }
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('chat_history_v1');
+      if (raw == null) return;
+      final data = jsonDecode(raw) as List<dynamic>;
+      _history.clear();
+      for (final item in data) {
+        final msgs = <ChatMessage>[];
+        for (final m in (item['messages'] as List<dynamic>)) {
+          msgs.add(ChatMessage(
+            id: m['id'] ?? DateTime.now().toString(),
+            text: m['text'] ?? '',
+            isUser: m['isUser'] ?? false,
+            timestamp: DateTime.tryParse(m['timestamp'] ?? '') ?? DateTime.now(),
+          ));
+        }
+        _history.add(ChatConversation(
+          id: item['id'] ?? DateTime.now().toString(),
+          title: item['title'] ?? '',
+          createdAt: DateTime.tryParse(item['createdAt'] ?? '') ?? DateTime.now(),
+          updatedAt: DateTime.tryParse(item['updatedAt'] ?? '') ?? DateTime.now(),
+          messages: msgs,
+        ));
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to load chat history: $e');
+    }
+  }
+
+  /// Save current active conversation as itinerary via ChatService
+  Future<bool> saveActiveItinerary(String title) async {
+    final conv = activeConversation;
+    if (conv == null) return false;
+    final places = conv.messages
+        .where((m) => m.relatedPlaces != null)
+        .expand((m) => m.relatedPlaces!)
+        .map((p) => {
+              'id': p.id,
+              'name': p.localizedName('en'),
+              'lat': p.latitude,
+              'lon': p.longitude,
+            })
+        .toList();
+
+    final req = ItinerarySaveRequest(
+      sessionId: conv.id,
+      title: title,
+      content: conv.title,
+      places: places,
+    );
+
+    try {
+      final res = await _chatService.saveItinerary(req);
+      return res.success;
+    } catch (e) {
+      debugPrint('Failed to save itinerary: $e');
+      return false;
     }
   }
 }

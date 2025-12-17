@@ -92,6 +92,43 @@ class _ChatScreenState extends State<ChatScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
+            icon: const Icon(Icons.save, color: Colors.white),
+            onPressed: chatProvider.messages.isEmpty
+                ? null
+                : () async {
+                    final title = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) {
+                        final controller = TextEditingController(text: chatProvider.activeTitle);
+                        return AlertDialog(
+                          title: Text(loc.translate('save_itinerary')),
+                          content: TextField(
+                            controller: controller,
+                            decoration: InputDecoration(hintText: loc.translate('itinerary_title')),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, null),
+                              child: Text(loc.translate('cancel')),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                              child: Text(loc.translate('save')),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                    if (title != null && title.trim().isNotEmpty) {
+                      final ok = await Provider.of<ChatProvider>(context, listen: false).saveActiveItinerary(title.trim());
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ok ? loc.translate('itinerary_saved') : loc.translate('itinerary_save_failed')),
+                      ));
+                    }
+                  },
+            tooltip: loc.translate('save'),
+          ),
+          IconButton(
             icon: const Icon(Icons.close, color: Colors.white),
             onPressed: () => Navigator.pop(context),
             tooltip: loc.translate('close_chat'),
@@ -357,7 +394,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     child: IconButton(
                       icon: const Icon(Icons.send, color: Colors.white),
-                      onPressed: _sendMessage,
+                      onPressed: isTyping ? null : _sendMessage,
                     ),
                   ),
                 ],
