@@ -46,7 +46,9 @@ dependencies:
 
   # Media (Avatar)
   image_picker: ^1.1.2
-  # Mapping
+  # Apple Sign-In (force newer compatible plugin)
+  sign_in_with_apple: ^7.0.1
+  # Mapping (pinned to versions compatible with current code)
   flutter_map: ^4.0.0
   latlong2: ^0.8.1
   geolocator: ^9.0.2
@@ -60,10 +62,15 @@ dependencies:
   
   # Supabase client for storage and auth
   supabase_flutter: ^1.4.0
+  # Load environment variables securely
+  flutter_dotenv: ^5.0.3
   # Mime type lookup for uploads
   mime: ^1.0.0
   # Parse MediaType for multipart content-type
   http_parser: ^4.0.0
+  # WebView (use newer android plugin to satisfy AGP namespace requirement)
+  webview_flutter: ^4.13.0
+  webview_flutter_android: ^4.10.11
 
 dev_dependencies:
   flutter_test:
@@ -91,6 +98,7 @@ flutter:
 
   assets:
     - assets/icons/
+    - .env
 
 flutter_launcher_icons:
   android: true

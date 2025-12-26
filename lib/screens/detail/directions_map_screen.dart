@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vietspots/models/place_model.dart';
@@ -97,7 +98,8 @@ class _DirectionsMapScreenState extends State<DirectionsMapScreen> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate:
+                      'https://api.trackasia.com/styles/v1/trackasia/streets-v11/tiles/{z}/{x}/{y}?access_token=${dotenv.env['TRACKASIA_API_KEY'] ?? ''}',
                 ),
                 PolylineLayer(
                   polylines: [
