@@ -135,6 +135,9 @@ class ChatService {
 
   ChatService(this._api);
 
+  /// Return the current user id set on the underlying ApiService (may be null)
+  String? getCurrentUserId() => _api.userId;
+
   /// POST /chat - Send chat message
   Future<ChatResponse> chat(ChatRequest request) async {
     // Use longer timeout for AI processing (90 seconds)

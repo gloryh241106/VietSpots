@@ -63,7 +63,9 @@ class PlaceProvider extends ChangeNotifier {
       }
 
       _userPosition = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
       );
 
       // EMULATOR FIX: Override with Vietnam location for testing
@@ -122,26 +124,34 @@ class PlaceProvider extends ChangeNotifier {
   }
 
   void setComments(String placeId, List<PlaceComment> comments) {
-    final idx = _places.indexWhere((p) => p.id == placeId);
-    if (idx == -1) return;
-    final place = _places[idx];
-    final updated = Place(
-      id: place.id,
-      nameLocalized: place.nameLocalized,
-      imageUrl: place.imageUrl,
-      rating: place.rating,
-      location: place.location,
-      descriptionLocalized: place.descriptionLocalized,
-      // Keep the original total reviews from backend; don't override with page size
-      commentCount: place.commentCount,
-      latitude: place.latitude,
-      longitude: place.longitude,
-      price: place.price,
-      openingTime: place.openingTime,
-      website: place.website,
-      comments: comments,
-    );
-    _places[idx] = updated;
+    // Update comments in any lists that may contain this place
+    void updateInList(List<Place> list) {
+      final i = list.indexWhere((p) => p.id == placeId);
+      if (i == -1) return;
+      final p = list[i];
+      final updated = Place(
+        id: p.id,
+        nameLocalized: p.nameLocalized,
+        imageUrl: p.imageUrl,
+        rating: p.rating,
+        location: p.location,
+        descriptionLocalized: p.descriptionLocalized,
+        commentCount: p.commentCount,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        price: p.price,
+        openingTime: p.openingTime,
+        website: p.website,
+        comments: comments,
+      );
+      list[i] = updated;
+    }
+
+    updateInList(_places);
+    updateInList(_nearbyPlaces);
+    updateInList(_recommendedPlaces);
+    updateInList(_visitedPlaces);
+
     notifyListeners();
   }
 
@@ -155,14 +165,33 @@ class PlaceProvider extends ChangeNotifier {
     return _favoriteIds.contains(id);
   }
 
-  void toggleFavorite(String id) {
+  Future<void> toggleFavorite(String id) async {
     if (_favoriteIds.contains(id)) {
       _favoriteIds.remove(id);
-    } else {
-      _favoriteIds.add(id);
+      notifyListeners();
+      await _saveFavorites();
+      return;
     }
+
+    // Add to favorites set first so UI updates immediately
+    _favoriteIds.add(id);
     notifyListeners();
-    _saveFavorites();
+    await _saveFavorites();
+
+    // If the place isn't already loaded in memory, try to fetch details
+    final exists = _places.any((p) => p.id == id);
+    if (!exists) {
+      try {
+        final dto = await _placeService.getPlace(id);
+        final place = dto.toPlace();
+        // Insert at top so it shows in favorites and lists
+        _places.insert(0, place);
+        // Keep recommended/nearby lists consistent - don't modify them here
+        notifyListeners();
+      } catch (e) {
+        debugPrint('Failed to fetch place details for favorite id $id: $e');
+      }
+    }
   }
 
   static const String _prefsFavoritesKey = 'favorite_place_ids';
@@ -304,28 +333,8 @@ class PlaceProvider extends ChangeNotifier {
         final service = CommentService(api);
         final dtos = await service.getPlaceComments(place.id, limit: 3);
         final comments = dtos.map((d) => d.toPlaceComment()).toList();
-
-        // Update comments for this place
-        final idx = _places.indexWhere((p) => p.id == place.id);
-        if (idx != -1) {
-          final p = _places[idx];
-          final updated = Place(
-            id: p.id,
-            nameLocalized: p.nameLocalized,
-            imageUrl: p.imageUrl,
-            rating: p.rating,
-            location: p.location,
-            descriptionLocalized: p.descriptionLocalized,
-            commentCount: p.commentCount,
-            latitude: p.latitude,
-            longitude: p.longitude,
-            price: p.price,
-            openingTime: p.openingTime,
-            website: p.website,
-            comments: comments,
-          );
-          _places[idx] = updated;
-        }
+        // Use unified setter to ensure comments are applied to all relevant lists
+        setComments(place.id, comments);
       } catch (e) {
         debugPrint('Failed to load comments for place ${place.id}: $e');
         // Continue loading other places

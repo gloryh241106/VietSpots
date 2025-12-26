@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -502,11 +504,13 @@ class _CultureScreenSettingsState extends State<CultureScreenSettings> {
       body: ListView(
         children: _cultures
             .map(
-              (c) => RadioListTile<String>(
-                value: c,
-                groupValue: _selected,
+              (c) => ListTile(
                 title: Text(labelForCulture(c)),
-                onChanged: (val) => setState(() => _selected = val),
+                selected: _selected == c,
+                trailing: _selected == c
+                    ? const Icon(Icons.radio_button_checked)
+                    : const Icon(Icons.radio_button_unchecked),
+                onTap: () => setState(() => _selected = c),
               ),
             )
             .toList(),
@@ -593,11 +597,13 @@ class _ReligionScreenSettingsState extends State<ReligionScreenSettings> {
       body: ListView(
         children: _religions
             .map(
-              (r) => RadioListTile<String>(
-                value: r,
-                groupValue: _selected,
+              (r) => ListTile(
                 title: Text(labelForReligion(r)),
-                onChanged: (val) => setState(() => _selected = val),
+                selected: _selected == r,
+                trailing: _selected == r
+                    ? const Icon(Icons.radio_button_checked)
+                    : const Icon(Icons.radio_button_unchecked),
+                onTap: () => setState(() => _selected = r),
               ),
             )
             .toList(),
@@ -673,14 +679,13 @@ class _CompanionPreferenceScreenSettingsState
       body: ListView(
         children: _companions
             .map(
-              (c) => RadioListTile<String>(
-                value: c,
-                groupValue: _selected,
+              (c) => ListTile(
                 title: Text(labelForCompanion(c)),
-                onChanged: (val) {
-                  if (val == null) return;
-                  setState(() => _selected = val);
-                },
+                selected: _selected == c,
+                trailing: _selected == c
+                    ? const Icon(Icons.radio_button_checked)
+                    : const Icon(Icons.radio_button_unchecked),
+                onTap: () => setState(() => _selected = c),
               ),
             )
             .toList(),
