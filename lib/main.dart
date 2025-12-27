@@ -13,6 +13,7 @@ import 'package:vietspots/services/api_service.dart';
 import 'package:vietspots/services/image_service.dart';
 import 'package:vietspots/services/place_service.dart';
 import 'package:vietspots/services/chat_service.dart';
+import 'package:vietspots/services/outbound_queue.dart';
 import 'package:vietspots/services/storage_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:vietspots/services/auth_service.dart';
@@ -45,6 +46,8 @@ void main() async {
   // Storage service for uploading images to Supabase
   final storageService = StorageService();
 
+  final outboundQueue = OutboundQueue();
+
   runApp(
     VietSpotsApp(
       apiService: apiService,
@@ -52,6 +55,7 @@ void main() async {
       placeService: placeService,
       chatService: chatService,
       storageService: storageService,
+      outboundQueue: outboundQueue,
     ),
   );
 }
@@ -62,6 +66,7 @@ class VietSpotsApp extends StatelessWidget {
   final PlaceService placeService;
   final ChatService chatService;
   final StorageService storageService;
+  final OutboundQueue? outboundQueue;
   const VietSpotsApp({
     super.key,
     required this.apiService,
@@ -69,6 +74,7 @@ class VietSpotsApp extends StatelessWidget {
     required this.placeService,
     required this.chatService,
     required this.storageService,
+    this.outboundQueue,
   });
 
   @override
@@ -85,7 +91,11 @@ class VietSpotsApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider(apiService)),
         ChangeNotifierProvider(
-          create: (_) => ChatProvider(chatService, placeService),
+          create: (_) => ChatProvider(
+            chatService,
+            placeService,
+            outboundQueue ?? OutboundQueue(),
+          ),
         ),
         ChangeNotifierProvider(create: (_) => PlaceProvider(placeService)),
         ChangeNotifierProvider(create: (_) => LocalizationProvider()),

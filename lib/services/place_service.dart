@@ -18,6 +18,8 @@ class PlaceDTO {
   final Map<String, dynamic>? about;
   final double? distanceKm;
   final List<String>? images;
+  final List<dynamic>? comments;
+  final int? commentCount;
   // Chat-specific fields from ChatbotOrchestrator
   final Map<String, dynamic>? weather;
   final double? score;
@@ -37,6 +39,8 @@ class PlaceDTO {
     this.about,
     this.distanceKm,
     this.images,
+    this.comments,
+    this.commentCount,
     this.weather,
     this.score,
   });
@@ -75,6 +79,13 @@ class PlaceDTO {
           })
           .where((url) => url.isNotEmpty)
           .toList(),
+      comments: json['comments'] is List
+          ? json['comments'] as List<dynamic>
+          : (json['comments'] is String
+                ? (jsonDecode(json['comments']) as List<dynamic>?)
+                : null),
+      commentCount:
+          (json['comment_count'] as int?) ?? (json['comments_count'] as int?),
       // Chat-specific fields from ChatbotOrchestrator
       weather: json['weather'] is Map ? json['weather'] : null,
       score: (json['score'] as num?)?.toDouble(),
@@ -265,6 +276,54 @@ class PlaceDTO {
 
   /// Convert to app's Place model
   Place toPlace() {
+    // Convert raw comment DTOs into PlaceComment instances
+    final parsedComments = <PlaceComment>[];
+    if (comments != null) {
+      for (final c in comments!) {
+        try {
+          if (c is Map) {
+            final cid = (c['id'] ?? c['comment_id'] ?? '').toString();
+            final author = (c['author'] ?? c['user'] ?? 'Unknown').toString();
+            final text = (c['text'] ?? c['comment'] ?? '').toString();
+            final ratingVal = (c['rating'] is num)
+                ? (c['rating'] as num).toInt()
+                : 0;
+            final imagePath = (c['image'] ?? c['image_url'])?.toString();
+            DateTime timestamp;
+            if (c['timestamp'] is String) {
+              timestamp = DateTime.tryParse(c['timestamp']) ?? DateTime.now();
+            } else if (c['timestamp'] is int) {
+              timestamp = DateTime.fromMillisecondsSinceEpoch(c['timestamp']);
+            } else {
+              timestamp = DateTime.now();
+            }
+
+            parsedComments.add(
+              PlaceComment(
+                id: cid.isNotEmpty
+                    ? cid
+                    : '${id}_c${parsedComments.length}_${DateTime.now().millisecondsSinceEpoch}',
+                author: author,
+                text: text,
+                rating: ratingVal,
+                imagePath: imagePath,
+                timestamp: timestamp,
+              ),
+            );
+          }
+        } catch (_) {
+          // ignore malformed comment entries
+        }
+      }
+    }
+
+    // Prefer actual parsed comments when available; otherwise fall back to
+    // provided `commentCount` from the backend. This avoids showing an
+    // incorrect count when the DTO includes actual comment objects.
+    final effectiveCommentCount = parsedComments.isNotEmpty
+        ? parsedComments.length
+        : (commentCount ?? 0);
+
     return Place(
       id: id,
       nameLocalized: {'vi': name, 'en': name},
@@ -274,7 +333,7 @@ class PlaceDTO {
       descriptionLocalized: about != null
           ? {'vi': _formatAbout(about!), 'en': _formatAbout(about!)}
           : null,
-      commentCount: ratingCount ?? 0,
+      commentCount: effectiveCommentCount,
       latitude: latitude,
       longitude: longitude,
       price: null,
@@ -282,6 +341,7 @@ class PlaceDTO {
           ? _formatOpeningHours(openingHours!)
           : null,
       website: website,
+      comments: parsedComments,
     );
   }
 }

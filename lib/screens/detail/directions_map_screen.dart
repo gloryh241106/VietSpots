@@ -2,12 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vietspots/models/place_model.dart';
 import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/utils/typography.dart';
+import 'package:vietspots/utils/trackasia.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:url_launcher/url_launcher.dart';
@@ -219,9 +219,16 @@ class _DirectionsMapScreenState extends State<DirectionsMapScreen> {
                 initialZoom: 13.0,
               ),
               children: [
+                // MAP: route / directions view
+                // We use OpenStreetMap public tiles as the default provider.
+                // If you need higher reliability or commercial use, replace
+                // this template with a paid provider (Mapbox/MapTiler/etc.)
+                // and set the appropriate API key in a secure place.
                 TileLayer(
-                  urlTemplate:
-                      'https://api.trackasia.com/styles/v1/trackasia/streets-v11/tiles/{z}/{x}/{y}?access_token=${dotenv.env['TRACKASIA_API_KEY'] ?? ''}',
+                  // TrackAsia tiles. Template comes from `.env` via
+                  // `TRACKASIA_TILE_TEMPLATE`, or is built from
+                  // `TRACKASIA_API_KEY`. See `trackAsiaTileUrl()`.
+                  urlTemplate: trackAsiaTileUrl(),
                 ),
                 PolylineLayer(
                   polylines: [

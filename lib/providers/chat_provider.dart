@@ -37,7 +37,7 @@ class ChatProvider with ChangeNotifier {
   // Storage key for chat history
   static const String _chatHistoryKey = 'chat_history';
 
-  ChatProvider(this._chatService, this._placeService) {
+  ChatProvider(this._chatService, this._placeService, [dynamic outboundQueue]) {
     _getUserLocation();
     _loadChatHistoryFromLocal();
   }
@@ -158,7 +158,7 @@ class ChatProvider with ChangeNotifier {
 
   String get activeTitle => activeConversation?.title ?? 'VietSpots';
 
-  void deleteConversation(String id) {
+  Future<void> deleteConversation(String id) async {
     final idx = _history.indexWhere((c) => c.id == id);
     if (idx != -1) {
       // if deleting active, clear messages and active id
@@ -167,8 +167,18 @@ class ChatProvider with ChangeNotifier {
         _messages.clear();
       }
       _history.removeAt(idx);
+      await _saveChatHistoryToLocal();
       notifyListeners();
     }
+  }
+
+  /// Persist a single conversation (or refresh storage) so it remains after app restarts.
+  Future<void> saveConversation(String id) async {
+    final conv = _findConversation(id);
+    if (conv == null) return;
+    conv.updatedAt = DateTime.now();
+    await _saveChatHistoryToLocal();
+    notifyListeners();
   }
 
   ChatConversation? _findConversation(String id) {
@@ -202,9 +212,16 @@ class ChatProvider with ChangeNotifier {
   }
 
   void sendMessage(String text) {
+    // Prevent sending while a response is being generated
+    if (_isLoading) return;
+
     // Add user message
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
+
+    // Mark loading immediately to avoid duplicate sends while the bot is processing
+    _isLoading = true;
+    notifyListeners();
 
     final userMsg = ChatMessage(
       id: DateTime.now().toString(),

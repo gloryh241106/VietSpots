@@ -8,10 +8,10 @@ import 'package:vietspots/providers/place_provider.dart';
 import 'package:vietspots/screens/detail/directions_map_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/utils/typography.dart';
+import 'package:vietspots/utils/trackasia.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vietspots/services/comment_service.dart';
 import 'package:vietspots/services/api_service.dart';
@@ -48,6 +48,21 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
 
   Future<void> _loadComments() async {
     try {
+      // If the Place object already contains comments (e.g. created from Chat DTO),
+      // prefer using those immediately to avoid extra network calls.
+      if (widget.place.comments.isNotEmpty) {
+        final provider = Provider.of<PlaceProvider>(context, listen: false);
+        final contains = provider.places.any((p) => p.id == widget.place.id);
+        if (contains) {
+          provider.setComments(widget.place.id, widget.place.comments);
+        } else {
+          setState(() {
+            _localComments = widget.place.comments;
+          });
+        }
+        return;
+      }
+
       final api = Provider.of<ApiService>(context, listen: false);
       final service = CommentService(api);
       final dtos = await service.getPlaceComments(widget.place.id, limit: 20);
@@ -97,23 +112,8 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
     }
   }
 
-  Future<void> _refreshComments() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Đang tải bình luận...'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-    await _loadComments();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Đã cập nhật!'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  }
+  // Note: manual refresh button removed from UI; comments reloads happen
+  // when provider data updates or when the screen is re-opened.
 
   void _openDirections(BuildContext context) {
     Navigator.push(
@@ -165,739 +165,814 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
     final loc = Provider.of<LocalizationProvider>(context);
     final locale = loc.locale.languageCode;
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 300,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              // Ensure title has enough left inset so it doesn't get
-              // clipped by the leading/back button when collapsed.
-              // Add right padding so title doesn't overlap action icons
-              // when the app bar is collapsed.
-              titlePadding: const EdgeInsetsDirectional.only(
-                start: 72,
-                end: 88,
-                bottom: 16,
-              ),
-              title: Text(
-                widget.place.localizedName(locale),
-                style: AppTypography.heading2.copyWith(
-                  color: Colors.white,
-                  shadows: const [
-                    Shadow(
-                      blurRadius: 8,
-                      color: Colors.black54,
-                      offset: Offset(0, 2),
+      // Pull-to-refresh for the whole details page. Mirrors HomeScreen's
+      // behaviour: refresh global place data then update comments.
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final provider = Provider.of<PlaceProvider>(context, listen: false);
+          await provider.refresh();
+          await _loadComments();
+        },
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 300,
+              pinned: true,
+              flexibleSpace: FlexibleSpaceBar(
+                // Ensure title has enough left inset so it doesn't get
+                // clipped by the leading/back button when collapsed.
+                // Add right padding so title doesn't overlap action icons
+                // when the app bar is collapsed.
+                titlePadding: const EdgeInsetsDirectional.only(
+                  start: 72,
+                  end: 88,
+                  bottom: 16,
+                ),
+                title: Text(
+                  widget.place.localizedName(locale),
+                  style: AppTypography.heading2.copyWith(
+                    color: Colors.white,
+                    shadows: const [
+                      Shadow(
+                        blurRadius: 8,
+                        color: Colors.black54,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                background: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CachedNetworkImage(
+                      imageUrl: widget.place.imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) =>
+                          Container(color: Colors.grey[300]),
+                      errorWidget: (context, url, error) =>
+                          Container(color: Colors.grey[300]),
                     ),
+                    Container(color: Colors.black26),
                   ],
                 ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
               ),
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: widget.place.imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) =>
-                        Container(color: Colors.grey[300]),
-                    errorWidget: (context, url, error) =>
-                        Container(color: Colors.grey[300]),
-                  ),
-                  Container(color: Colors.black26),
-                ],
-              ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh, color: Colors.white),
-                onPressed: _refreshComments,
-                tooltip: 'Làm mới bình luận',
-              ),
-              Consumer<PlaceProvider>(
-                builder: (context, placeProvider, _) {
-                  final isFav = placeProvider.isFavorite(widget.place.id);
-                  return IconButton(
-                    icon: Icon(
-                      isFav ? Icons.favorite : Icons.favorite_border,
-                      color: isFav ? Colors.redAccent : Colors.white,
-                      size: 28,
-                    ),
-                    onPressed: () {
-                      placeProvider.toggleFavorite(widget.place.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isFav
-                                ? loc.translate('removed_from_favorites')
-                                : loc.translate('added_to_favorites'),
+              actions: [
+                Consumer<PlaceProvider>(
+                  builder: (context, placeProvider, _) {
+                    final isFav = placeProvider.isFavorite(widget.place.id);
+                    return IconButton(
+                      icon: Icon(
+                        isFav ? Icons.favorite : Icons.favorite_border,
+                        color: isFav ? Colors.redAccent : Colors.white,
+                        size: 28,
+                      ),
+                      onPressed: () {
+                        placeProvider.toggleFavorite(widget.place.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isFav
+                                  ? loc.translate('removed_from_favorites')
+                                  : loc.translate('added_to_favorites'),
+                            ),
+                            duration: const Duration(seconds: 1),
                           ),
-                          duration: const Duration(seconds: 1),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ],
-          ),
-
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Rating row
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.star,
-                              color: Colors.amber,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              widget.place.rating.toStringAsFixed(1),
-                              style: AppTypography.titleLarge,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Consumer<PlaceProvider>(
-                        builder: (context, provider, _) {
-                          final p = provider.places.firstWhere(
-                            (e) => e.id == widget.place.id,
-                            orElse: () => widget.place,
-                          );
-                          return Text(
-                            '(${p.commentCount} ${loc.translate('reviews')})',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.grey[600]),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-
-                  // About
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.info_outline,
-                        color: Colors.redAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        loc.translate('about_this_place'),
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _buildAboutSection(widget.place.localizedDescription(locale)),
-                  const SizedBox(height: 20),
-
-                  // Opening time heading (move 'Location' label to map section)
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.access_time,
-                        color: Colors.redAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        loc.translate('opening_time'),
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  if (widget.place.price != null &&
-                      widget.place.price!.trim().isNotEmpty)
-                    Text(
-                      '${loc.translate('price')}: ${widget.place.price}',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  if (widget.place.openingTime != null &&
-                      widget.place.openingTime!.trim().isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    // Compact two-column layout for opening times.
-                    Builder(
-                      builder: (context) {
-                        final raw = widget.place.openingTime!.trim();
-                        final lines = raw
-                            .split('\n')
-                            .map((s) => s.trim())
-                            .where((s) => s.isNotEmpty)
-                            .toList();
-
-                        // Single-line (or simple) value: render as-is but emphasize times.
-                        if (lines.length <= 1) {
-                          final theme = Theme.of(context);
-                          final base = theme.textTheme.bodyLarge;
-                          final hasDigit = RegExp(r'\d').hasMatch(raw);
-                          return Text(
-                            raw,
-                            style: hasDigit
-                                ? base?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color:
-                                        theme.textTheme.bodyLarge?.color ??
-                                        Colors.black87,
-                                  )
-                                : base,
-                          );
-                        }
-
-                        final half = (lines.length / 2).ceil();
-                        final left = lines.sublist(0, half);
-                        final right = lines.sublist(half);
-
-                        // Determine today's label in Vietnamese (PlaceService uses these)
-                        final now = DateTime.now();
-                        final dayOrder = [
-                          'Thứ Hai',
-                          'Thứ Ba',
-                          'Thứ Tư',
-                          'Thứ Năm',
-                          'Thứ Sáu',
-                          'Thứ Bảy',
-                          'Chủ Nhật',
-                        ];
-                        final todayLabel = dayOrder[(now.weekday - 1) % 7];
-
-                        bool? isOpenNowFromTime(String timeText) {
-                          final t = timeText.trim().toLowerCase();
-                          if (t.isEmpty) return null;
-                          if (t.contains('all') ||
-                              t.contains('all day') ||
-                              t.contains('24')) {
-                            return true;
-                          }
-                          if (t.contains('closed') ||
-                              t.contains('đóng') ||
-                              t.contains('off')) {
-                            return false;
-                          }
-
-                          // Extract all time ranges (accept hyphen, en-dash, em-dash)
-                          final rangeRegex = RegExp(
-                            r"(\d{1,2}:?\d{0,2})\s*[\-–—−]\s*(\d{1,2}:?\d{0,2})",
-                          );
-                          final matches = rangeRegex
-                              .allMatches(timeText)
-                              .toList();
-                          if (matches.isEmpty) return null;
-
-                          String parsePart(String s) {
-                            return s.replaceAll(' ', '');
-                          }
-
-                          int toMinutes(String part) {
-                            final p = part.split(':');
-                            try {
-                              final h = int.parse(p[0]);
-                              final m = p.length > 1 && p[1].isNotEmpty
-                                  ? int.parse(p[1])
-                                  : 0;
-                              return h * 60 + m;
-                            } catch (_) {
-                              return -1;
-                            }
-                          }
-
-                          final nowMin = now.hour * 60 + now.minute;
-                          // If any range contains 'now', consider it open. If ranges parsed but none match, return false.
-                          var foundValidRange = false;
-                          for (final m in matches) {
-                            final startRaw = parsePart(m.group(1)!);
-                            final endRaw = parsePart(m.group(2)!);
-                            final start = toMinutes(startRaw);
-                            final end = toMinutes(endRaw);
-                            if (start < 0 || end < 0) continue;
-                            foundValidRange = true;
-                            if (end > start) {
-                              if (nowMin >= start && nowMin <= end) return true;
-                            } else {
-                              // Overnight range
-                              if (nowMin >= start || nowMin <= end) return true;
-                            }
-                          }
-                          return foundValidRange ? false : null;
-                        }
-
-                        // For single-line raw values, try to decide open state
-                        final singleIsOpen = isOpenNowFromTime(raw);
-
-                        Widget rowItem(String line) {
-                          final parts = line.split(':');
-                          final day = parts.length > 1 ? parts.first : '';
-                          final time = parts.length > 1
-                              ? parts.sublist(1).join(':').trim()
-                              : line;
-                          // Determine if this row represents today
-                          final isToday =
-                              day.trim().toLowerCase() ==
-                              todayLabel.toLowerCase();
-                          final inferredOpen = isOpenNowFromTime(time);
-                          Color timeColor =
-                              Theme.of(context).textTheme.bodyMedium?.color ??
-                              Colors.black87;
-                          if (isToday) {
-                            if (inferredOpen == true) {
-                              timeColor = Colors.green;
-                            } else if (inferredOpen == false) {
-                              timeColor = Colors.red;
-                            } else if (singleIsOpen == true) {
-                              timeColor = Colors.green;
-                            } else if (singleIsOpen == false) {
-                              timeColor = Colors.red;
-                            }
-                          }
-                          final timeStyle = Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: timeColor,
-                              );
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    day,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: (() {
-                                    // Split multiple ranges (comma/;//) into separate lines
-                                    final ranges = time
-                                        .split(RegExp(r',|;|/'))
-                                        .map((s) => s.trim())
-                                        .where((s) => s.isNotEmpty)
-                                        .toList();
-                                    if (ranges.length <= 1) {
-                                      return Text(
-                                        time,
-                                        textAlign: TextAlign.right,
-                                        style: timeStyle,
-                                        overflow: TextOverflow.ellipsis,
-                                      );
-                                    }
-
-                                    return Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: ranges.map((r) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 2.0,
-                                          ),
-                                          child: Text(
-                                            r,
-                                            textAlign: TextAlign.right,
-                                            style: timeStyle,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        );
-                                      }).toList(),
-                                    );
-                                  })(),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isNarrow = constraints.maxWidth < 420;
-                            final allLines = [...left, ...right];
-                            if (isNarrow) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: allLines
-                                    .map((l) => rowItem(l))
-                                    .toList(),
-                              );
-                            }
-
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: left
-                                        .map((l) => rowItem(l))
-                                        .toList(),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: right
-                                        .map((l) => rowItem(l))
-                                        .toList(),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
                         );
                       },
-                    ),
-                  ],
+                    );
+                  },
+                ),
+              ],
+            ),
 
-                  // Website: promoted to its own top-level section
-                  if (widget.place.website != null &&
-                      widget.place.website!.trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Rating row
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.star,
+                                color: Colors.amber,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                widget.place.rating.toStringAsFixed(1),
+                                style: AppTypography.titleLarge,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Consumer<PlaceProvider>(
+                          builder: (context, provider, _) {
+                            final p = provider.places.firstWhere(
+                              (e) => e.id == widget.place.id,
+                              orElse: () => widget.place,
+                            );
+                            return Text(
+                              '(${p.commentCount} ${loc.translate('reviews')})',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: Colors.grey[600]),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    // About
                     Row(
                       children: [
                         const Icon(
-                          Icons.public,
+                          Icons.info_outline,
                           color: Colors.redAccent,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          // Ensure the Website heading starts with a capital letter
-                          () {
-                            final l = Provider.of<LocalizationProvider>(
-                              context,
-                              listen: false,
-                            ).translate('website');
-                            if (l.trim().isEmpty) return 'Website';
-                            return l[0].toUpperCase() + l.substring(1);
-                          }(),
+                          loc.translate('about_this_place'),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildAboutSection(
+                      widget.place.localizedDescription(locale),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Opening time heading (move 'Location' label to map section)
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.access_time,
+                          color: Colors.redAccent,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          loc.translate('opening_time'),
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () => _openWebsite(context),
-                      child: Text(
-                        widget.place.website!,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          decoration: TextDecoration.underline,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  const SizedBox(height: 8),
 
-                  // Location map preview label
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        color: Colors.redAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
+                    if (widget.place.price != null &&
+                        widget.place.price!.trim().isNotEmpty)
                       Text(
-                        loc.translate('location'),
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        '${loc.translate('price')}: ${widget.place.price}',
+                        style: Theme.of(context).textTheme.bodyLarge,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SizedBox(
-                      height: 220,
-                      width: double.infinity,
-                      child: FlutterMap(
-                        options: MapOptions(
-                          initialCenter: LatLng(
-                            widget.place.latitude,
-                            widget.place.longitude,
-                          ),
-                          initialZoom: 14.0,
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://api.trackasia.com/styles/v1/trackasia/streets-v11/tiles/{z}/{x}/{y}?access_token=${dotenv.env['TRACKASIA_API_KEY'] ?? ''}',
-                          ),
-                          MarkerLayer(
-                            markers: [
-                              Marker(
-                                point: LatLng(
-                                  widget.place.latitude,
-                                  widget.place.longitude,
-                                ),
-                                width: 40,
-                                height: 40,
-                                child: const Icon(
-                                  Icons.location_on,
-                                  color: Colors.red,
-                                  size: 36,
-                                ),
+                    if (widget.place.openingTime != null &&
+                        widget.place.openingTime!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      // Compact two-column layout for opening times.
+                      Builder(
+                        builder: (context) {
+                          final raw = widget.place.openingTime!.trim();
+                          final lines = raw
+                              .split('\n')
+                              .map((s) => s.trim())
+                              .where((s) => s.isNotEmpty)
+                              .toList();
+
+                          // Single-line (or simple) value: render as-is but emphasize times.
+                          if (lines.length <= 1) {
+                            final theme = Theme.of(context);
+                            final base = theme.textTheme.bodyLarge;
+                            final hasDigit = RegExp(r'\d').hasMatch(raw);
+                            return Text(
+                              raw,
+                              style: hasDigit
+                                  ? base?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color:
+                                          theme.textTheme.bodyLarge?.color ??
+                                          Colors.black87,
+                                    )
+                                  : base,
+                            );
+                          }
+
+                          final half = (lines.length / 2).ceil();
+                          final left = lines.sublist(0, half);
+                          final right = lines.sublist(half);
+
+                          // Determine today's label in Vietnamese (PlaceService uses these)
+                          final now = DateTime.now();
+                          final dayOrder = [
+                            'Thứ Hai',
+                            'Thứ Ba',
+                            'Thứ Tư',
+                            'Thứ Năm',
+                            'Thứ Sáu',
+                            'Thứ Bảy',
+                            'Chủ Nhật',
+                          ];
+                          final todayLabel = dayOrder[(now.weekday - 1) % 7];
+
+                          bool? isOpenNowFromTime(String timeText) {
+                            final t = timeText.trim().toLowerCase();
+                            if (t.isEmpty) return null;
+                            if (t.contains('all') ||
+                                t.contains('all day') ||
+                                t.contains('24')) {
+                              return true;
+                            }
+                            if (t.contains('closed') ||
+                                t.contains('đóng') ||
+                                t.contains('off')) {
+                              return false;
+                            }
+
+                            // Extract all time ranges (accept hyphen, en-dash, em-dash)
+                            final rangeRegex = RegExp(
+                              r"(\d{1,2}:?\d{0,2})\s*[\-–—−]\s*(\d{1,2}:?\d{0,2})",
+                            );
+                            final matches = rangeRegex
+                                .allMatches(timeText)
+                                .toList();
+                            if (matches.isEmpty) return null;
+
+                            String parsePart(String s) {
+                              return s.replaceAll(' ', '');
+                            }
+
+                            int toMinutes(String part) {
+                              final p = part.split(':');
+                              try {
+                                final h = int.parse(p[0]);
+                                final m = p.length > 1 && p[1].isNotEmpty
+                                    ? int.parse(p[1])
+                                    : 0;
+                                return h * 60 + m;
+                              } catch (_) {
+                                return -1;
+                              }
+                            }
+
+                            final nowMin = now.hour * 60 + now.minute;
+                            // If any range contains 'now', consider it open. If ranges parsed but none match, return false.
+                            var foundValidRange = false;
+                            for (final m in matches) {
+                              final startRaw = parsePart(m.group(1)!);
+                              final endRaw = parsePart(m.group(2)!);
+                              final start = toMinutes(startRaw);
+                              final end = toMinutes(endRaw);
+                              if (start < 0 || end < 0) continue;
+                              foundValidRange = true;
+                              if (end > start) {
+                                if (nowMin >= start && nowMin <= end) {
+                                  return true;
+                                }
+                              } else {
+                                // Overnight range
+                                if (nowMin >= start || nowMin <= end) {
+                                  return true;
+                                }
+                              }
+                            }
+                            return foundValidRange ? false : null;
+                          }
+
+                          // For single-line raw values, try to decide open state
+                          final singleIsOpen = isOpenNowFromTime(raw);
+
+                          Widget rowItem(String line) {
+                            final parts = line.split(':');
+                            final day = parts.length > 1 ? parts.first : '';
+                            final time = parts.length > 1
+                                ? parts.sublist(1).join(':').trim()
+                                : line;
+                            // Determine if this row represents today
+                            final isToday =
+                                day.trim().toLowerCase() ==
+                                todayLabel.toLowerCase();
+                            final inferredOpen = isOpenNowFromTime(time);
+                            Color timeColor =
+                                Theme.of(context).textTheme.bodyMedium?.color ??
+                                Colors.black87;
+                            if (isToday) {
+                              if (inferredOpen == true) {
+                                timeColor = Colors.green;
+                              } else if (inferredOpen == false) {
+                                timeColor = Colors.red;
+                              } else if (singleIsOpen == true) {
+                                timeColor = Colors.green;
+                              } else if (singleIsOpen == false) {
+                                timeColor = Colors.red;
+                              }
+                            }
+                            final timeStyle = Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: timeColor,
+                                );
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      day,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: (() {
+                                      // Split multiple ranges (comma/;//) into separate lines
+                                      final ranges = time
+                                          .split(RegExp(r',|;|/'))
+                                          .map((s) => s.trim())
+                                          .where((s) => s.isNotEmpty)
+                                          .toList();
+                                      if (ranges.length <= 1) {
+                                        return Text(
+                                          time,
+                                          textAlign: TextAlign.right,
+                                          style: timeStyle,
+                                          overflow: TextOverflow.ellipsis,
+                                        );
+                                      }
+
+                                      return Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: ranges.map((r) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 2.0,
+                                            ),
+                                            child: Text(
+                                              r,
+                                              textAlign: TextAlign.right,
+                                              style: timeStyle,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          );
+                                        }).toList(),
+                                      );
+                                    })(),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                            );
+                          }
 
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[800]
-                          : Colors.grey[50],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          color: Colors.redAccent,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            widget.place.location,
-                            style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(fontWeight: FontWeight.w500),
-                            maxLines: 2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                          return LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isNarrow = constraints.maxWidth < 420;
+                              final allLines = [...left, ...right];
+                              if (isNarrow) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: allLines
+                                      .map((l) => rowItem(l))
+                                      .toList(),
+                                );
+                              }
 
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _showAddComment(context),
-                          child: Text(loc.translate('add_comment')),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _openDirections(context),
-                          child: Text(loc.translate('get_directions')),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Rating + reviews
-                  Text(
-                    loc.translate('rating'),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.star, color: Colors.amber),
-                      const SizedBox(width: 8),
-                      Text(widget.place.rating.toStringAsFixed(1)),
-                      const SizedBox(width: 12),
-                      Consumer<PlaceProvider>(
-                        builder: (context, provider, _) {
-                          final p = provider.places.firstWhere(
-                            (e) => e.id == widget.place.id,
-                            orElse: () => widget.place,
-                          );
-                          return Text(
-                            '(${p.commentCount} ${loc.translate('reviews')})',
-                            style: Theme.of(context).textTheme.bodySmall,
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: left
+                                          .map((l) => rowItem(l))
+                                          .toList(),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: right
+                                          .map((l) => rowItem(l))
+                                          .toList(),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           );
                         },
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
 
-                  Consumer<PlaceProvider>(
-                    builder: (context, provider, _) {
-                      final p = provider.places.firstWhere(
-                        (e) => e.id == widget.place.id,
-                        orElse: () => widget.place,
-                      );
-                      final commentsToShow = p.comments.isNotEmpty
-                          ? p.comments
-                          : _localComments;
-                      if (commentsToShow.isEmpty) {
-                        return Text(loc.translate('no_reviews_yet'));
-                      }
-                      return Column(
-                        children: commentsToShow.reversed.map((c) {
-                          final imagePath = c.imagePath;
-                          return ListTile(
-                            leading: CircleAvatar(
-                              child: Text(
-                                c.author.isNotEmpty ? c.author[0] : '?',
+                    // Website: promoted to its own top-level section
+                    if (widget.place.website != null &&
+                        widget.place.website!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.public,
+                            color: Colors.redAccent,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            // Ensure the Website heading starts with a capital letter
+                            () {
+                              final l = Provider.of<LocalizationProvider>(
+                                context,
+                                listen: false,
+                              ).translate('website');
+                              if (l.trim().isEmpty) return 'Website';
+                              return l[0].toUpperCase() + l.substring(1);
+                            }(),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () => _openWebsite(context),
+                        child: Text(
+                          widget.place.website!,
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                                decoration: TextDecoration.underline,
+                                color: Theme.of(context).primaryColor,
                               ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    const SizedBox(height: 8),
+
+                    // Location map preview label
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          color: Colors.redAccent,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          loc.translate('location'),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // MAP PREVIEW
+                    // Using OpenStreetMap public tile servers here as the
+                    // default raster tile provider. OSM is free to use for
+                    // development and small projects, but please review the
+                    // OSM Tile Usage Policy for production use:
+                    // https://operations.osmfoundation.org/policies/tiles
+                    //
+                    // Important: OSM requests should include a proper
+                    // User-Agent identifying your application. The
+                    // `flutter_map` package provides `TileLayer.userAgentPackageName`
+                    // to set this. Consider setting it to your app's package
+                    // name before publishing.
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        height: 220,
+                        width: double.infinity,
+                        child: FlutterMap(
+                          options: MapOptions(
+                            initialCenter: LatLng(
+                              widget.place.latitude,
+                              widget.place.longitude,
                             ),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    c.author.isNotEmpty
-                                        ? c.author
-                                        : 'Anonymous',
-                                    style: AppTypography.titleMedium,
+                            initialZoom: 14.0,
+                          ),
+                          children: [
+                            TileLayer(
+                              // TrackAsia tiles. Template comes from `.env` via
+                              // `TRACKASIA_TILE_TEMPLATE`, or is built from
+                              // `TRACKASIA_API_KEY`. See `trackAsiaTileUrl()`.
+                              urlTemplate: trackAsiaTileUrl(),
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  point: LatLng(
+                                    widget.place.latitude,
+                                    widget.place.longitude,
                                   ),
-                                ),
-                                Text(
-                                  _timeAgo(c.timestamp),
-                                  style: AppTypography.caption.copyWith(
-                                    color: AppTextColors.secondary(context),
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: Colors.red,
+                                    size: 36,
                                   ),
                                 ),
                               ],
                             ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    for (int i = 0; i < c.rating; i++)
-                                      const Icon(
-                                        Icons.star,
-                                        size: 16,
-                                        color: Colors.amber,
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(c.text),
-                                if (imagePath != null &&
-                                    imagePath.trim().isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Builder(
-                                      builder: (context) {
-                                        // imagePath may be a network URL, data URI, or local file path
-                                        if (imagePath.startsWith('http')) {
-                                          return CachedNetworkImage(
-                                            imageUrl: imagePath,
-                                            height: 160,
-                                            width: double.infinity,
-                                            fit: BoxFit.cover,
-                                            placeholder: (c, u) => Container(
-                                              height: 160,
-                                              color: Colors.grey[200],
-                                            ),
-                                            errorWidget: (c, u, e) =>
-                                                const SizedBox.shrink(),
-                                          );
-                                        }
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
 
-                                        if (imagePath.startsWith('data:')) {
-                                          try {
-                                            final base64Str = imagePath
-                                                .split(',')
-                                                .last;
-                                            final bytes = base64Decode(
-                                              base64Str,
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.grey[800]
+                            : Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            color: Colors.redAccent,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              widget.place.location,
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(fontWeight: FontWeight.w500),
+                              maxLines: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => _showAddComment(context),
+                            child: Text(loc.translate('add_comment')),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _openDirections(context),
+                            child: Text(loc.translate('get_directions')),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Rating + reviews
+                    Text(
+                      loc.translate('rating'),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.star, color: Colors.amber),
+                        const SizedBox(width: 8),
+                        Text(widget.place.rating.toStringAsFixed(1)),
+                        const SizedBox(width: 12),
+                        Consumer<PlaceProvider>(
+                          builder: (context, provider, _) {
+                            final p = provider.places.firstWhere(
+                              (e) => e.id == widget.place.id,
+                              orElse: () => widget.place,
+                            );
+                            return Text(
+                              '(${p.commentCount} ${loc.translate('reviews')})',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    Consumer<PlaceProvider>(
+                      builder: (context, provider, _) {
+                        final p = provider.places.firstWhere(
+                          (e) => e.id == widget.place.id,
+                          orElse: () => widget.place,
+                        );
+                        final commentsToShow = p.comments.isNotEmpty
+                            ? p.comments
+                            : _localComments;
+                        if (commentsToShow.isEmpty) {
+                          return Text(loc.translate('no_reviews_yet'));
+                        }
+
+                        // Render each comment inside a bordered card. Avatar is
+                        // placed at the top-left of the card (not vertically
+                        // centered) to match the requested layout.
+                        return Column(
+                          children: commentsToShow.reversed.map((c) {
+                            final imagePath = c.imagePath;
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 8.0),
+                              padding: const EdgeInsets.all(12.0),
+                              decoration: BoxDecoration(
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.grey[850]
+                                    : Colors.white,
+                                border: Border.all(
+                                  color: Colors.grey.shade300,
+                                  width: 1,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 20,
+                                        child: Text(
+                                          c.author.isNotEmpty
+                                              ? c.author[0]
+                                              : '?',
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    c.author.isNotEmpty
+                                                        ? c.author
+                                                        : 'Anonymous',
+                                                    style: AppTypography
+                                                        .titleMedium,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  _timeAgo(c.timestamp),
+                                                  style: AppTypography.caption
+                                                      .copyWith(
+                                                        color:
+                                                            AppTextColors.secondary(
+                                                              context,
+                                                            ),
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                for (
+                                                  int i = 0;
+                                                  i < c.rating;
+                                                  i++
+                                                )
+                                                  const Icon(
+                                                    Icons.star,
+                                                    size: 16,
+                                                    color: Colors.amber,
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(c.text),
+                                  if (imagePath != null &&
+                                      imagePath.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Builder(
+                                        builder: (context) {
+                                          // imagePath may be a network URL, data URI, or local file path
+                                          if (imagePath.startsWith('http')) {
+                                            return CachedNetworkImage(
+                                              imageUrl: imagePath,
+                                              height: 160,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                              placeholder: (c, u) => Container(
+                                                height: 160,
+                                                color: Colors.grey[200],
+                                              ),
+                                              errorWidget: (c, u, e) =>
+                                                  const SizedBox.shrink(),
                                             );
-                                            return Image.memory(
-                                              bytes,
+                                          }
+
+                                          if (imagePath.startsWith('data:')) {
+                                            try {
+                                              final base64Str = imagePath
+                                                  .split(',')
+                                                  .last;
+                                              final bytes = base64Decode(
+                                                base64Str,
+                                              );
+                                              return Image.memory(
+                                                bytes,
+                                                height: 160,
+                                                width: double.infinity,
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) =>
+                                                        const SizedBox.shrink(),
+                                              );
+                                            } catch (_) {
+                                              return const SizedBox.shrink();
+                                            }
+                                          }
+
+                                          // Fallback: local file (mobile)
+                                          try {
+                                            return Image.file(
+                                              File(imagePath),
                                               height: 160,
                                               width: double.infinity,
                                               fit: BoxFit.cover,
                                               errorBuilder:
-                                                  (
-                                                    context,
-                                                    error,
-                                                    stackTrace,
-                                                  ) => const SizedBox.shrink(),
+                                                  (context, error, stackTrace) {
+                                                    return const SizedBox.shrink();
+                                                  },
                                             );
                                           } catch (_) {
                                             return const SizedBox.shrink();
                                           }
-                                        }
-
-                                        // Fallback: local file (mobile)
-                                        try {
-                                          return Image.file(
-                                            File(imagePath),
-                                            height: 160,
-                                            width: double.infinity,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) {
-                                                  return const SizedBox.shrink();
-                                                },
-                                          );
-                                        } catch (_) {
-                                          return const SizedBox.shrink();
-                                        }
-                                      },
+                                        },
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
 
-                  const SizedBox(height: 120),
-                ],
+                    const SizedBox(height: 120),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

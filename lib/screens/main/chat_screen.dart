@@ -22,11 +22,10 @@ class _ChatScreenState extends State<ChatScreen> {
   int _lastRenderedItemCount = 0;
 
   void _sendMessage() {
+    final provider = Provider.of<ChatProvider>(context, listen: false);
+    if (provider.isLoading) return;
     if (_controller.text.trim().isEmpty) return;
-    Provider.of<ChatProvider>(
-      context,
-      listen: false,
-    ).sendMessage(_controller.text);
+    provider.sendMessage(_controller.text);
     _controller.clear();
   }
 
@@ -165,6 +164,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                         onTap: () => Navigator.pop(ctx, 'open'),
                                       ),
                                       ListTile(
+                                        title: Text(loc.translate('save')),
+                                        onTap: () => Navigator.pop(ctx, 'save'),
+                                      ),
+                                      ListTile(
                                         title: Text(loc.translate('share')),
                                         onTap: () =>
                                             Navigator.pop(ctx, 'share'),
@@ -192,6 +195,19 @@ class _ChatScreenState extends State<ChatScreen> {
                                 context,
                                 listen: false,
                               ).loadConversation(conv.id);
+                            } else if (choice == 'save') {
+                              await Provider.of<ChatProvider>(
+                                context,
+                                listen: false,
+                              ).saveConversation(conv.id);
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    loc.translate('conversation_saved'),
+                                  ),
+                                ),
+                              );
                             } else if (choice == 'share') {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -201,10 +217,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                               );
                             } else if (choice == 'delete') {
-                              Provider.of<ChatProvider>(
+                              await Provider.of<ChatProvider>(
                                 context,
                                 listen: false,
                               ).deleteConversation(conv.id);
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
@@ -337,7 +354,13 @@ class _ChatScreenState extends State<ChatScreen> {
                             vertical: 14,
                           ),
                         ),
-                        onSubmitted: (_) => _sendMessage(),
+                        onSubmitted: (_) {
+                          final provider = Provider.of<ChatProvider>(
+                            context,
+                            listen: false,
+                          );
+                          if (!provider.isLoading) _sendMessage();
+                        },
                       ),
                     ),
                   ),
@@ -360,7 +383,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     child: IconButton(
                       icon: const Icon(Icons.send, color: Colors.white),
-                      onPressed: _sendMessage,
+                      onPressed: isTyping ? null : _sendMessage,
                     ),
                   ),
                 ],

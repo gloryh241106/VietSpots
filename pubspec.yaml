@@ -52,10 +52,6 @@ dependencies:
   geolocator: ^14.0.2
   # Apple Sign-In (force newer compatible plugin)
   sign_in_with_apple: ^7.0.1
-  # Mapping (pinned to versions compatible with current code)
-  flutter_map: ^4.0.0
-  latlong2: ^0.8.1
-  geolocator: ^9.0.2
   crop_your_image: ^2.0.0
   path_provider: ^2.1.5
   shared_preferences: ^2.3.2
@@ -65,7 +61,7 @@ dependencies:
   http: ^1.6.0
   
   # Supabase client for storage and auth
-  supabase_flutter: ^1.4.0
+  supabase_flutter: ^2.12.0
   # Load environment variables securely
   flutter_dotenv: ^5.0.3
   # Mime type lookup for uploads

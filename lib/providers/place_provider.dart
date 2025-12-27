@@ -136,7 +136,7 @@ class PlaceProvider extends ChangeNotifier {
         rating: p.rating,
         location: p.location,
         descriptionLocalized: p.descriptionLocalized,
-        commentCount: p.commentCount,
+        commentCount: comments.length,
         latitude: p.latitude,
         longitude: p.longitude,
         price: p.price,
@@ -151,6 +151,25 @@ class PlaceProvider extends ChangeNotifier {
     updateInList(_nearbyPlaces);
     updateInList(_recommendedPlaces);
     updateInList(_visitedPlaces);
+
+    notifyListeners();
+  }
+
+  /// Insert or update a Place in all internal lists so UI can find AI-generated places
+  void upsertPlace(Place place) {
+    void updateList(List<Place> list) {
+      final i = list.indexWhere((p) => p.id == place.id);
+      if (i == -1) {
+        list.insert(0, place);
+      } else {
+        list[i] = place;
+      }
+    }
+
+    updateList(_places);
+    updateList(_nearbyPlaces);
+    updateList(_recommendedPlaces);
+    // visited places should not be auto-inserted
 
     notifyListeners();
   }
