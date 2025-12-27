@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:vietspots/models/chat_model.dart';
 import 'package:vietspots/providers/chat_provider.dart';
 import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/widgets/place_card.dart';
+import 'package:vietspots/utils/typography.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -76,11 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: Text(
           chatProvider.activeTitle,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
+          style: AppTypography.titleLarge.copyWith(color: Colors.white),
         ),
         centerTitle: true,
         elevation: 0,
@@ -102,8 +100,14 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           children: [
             UserAccountsDrawerHeader(
-              accountName: Text(loc.translate('ai_name')),
-              accountEmail: Text(loc.translate('ai_subtitle')),
+              accountName: Text(
+                loc.translate('ai_name'),
+                style: AppTypography.titleMedium.copyWith(color: Colors.white),
+              ),
+              accountEmail: Text(
+                loc.translate('ai_subtitle'),
+                style: AppTypography.bodySmall.copyWith(color: Colors.white70),
+              ),
               currentAccountPicture: const CircleAvatar(
                 child: Icon(Icons.smart_toy),
               ),
@@ -119,9 +123,8 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 loc.translate('history'),
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
+                style: AppTypography.sectionHeader.copyWith(
+                  color: AppTextColors.tertiary(context),
                 ),
               ),
             ),
@@ -515,16 +518,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       msg.relatedPlaces!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 12.0),
-                      child: SizedBox(
-                        height: 220,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: msg.relatedPlaces!.length,
-                          itemBuilder: (context, index) {
-                            return PlaceCard(place: msg.relatedPlaces![index]);
-                          },
-                        ),
-                      ),
+                      child: ChatPlacesCarousel(places: msg.relatedPlaces!),
                     ),
                 ],
               ),
@@ -610,6 +604,136 @@ class _BouncingDotsState extends State<_BouncingDots>
           }),
         );
       },
+    );
+  }
+}
+
+class ChatPlacesCarousel extends StatefulWidget {
+  const ChatPlacesCarousel({super.key, required this.places});
+
+  final List places;
+
+  @override
+  State<ChatPlacesCarousel> createState() => _ChatPlacesCarouselState();
+}
+
+class _ChatPlacesCarouselState extends State<ChatPlacesCarousel> {
+  final ScrollController _controller = ScrollController();
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+  double get _step => 240.0;
+
+  void _scrollTo(double offset) {
+    final max = _controller.hasClients
+        ? _controller.position.maxScrollExtent
+        : 0.0;
+    final target = offset.clamp(0.0, max);
+    _controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_updateNavVisibility);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_updateNavVisibility);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateNavVisibility());
+  }
+
+  void _updateNavVisibility() {
+    if (!_controller.hasClients) return;
+    final max = _controller.position.maxScrollExtent;
+    final off = _controller.offset;
+    final canLeft = off > 8.0;
+    final canRight = off < (max - 8.0);
+    if (canLeft != _canScrollLeft || canRight != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = canLeft;
+        _canScrollRight = canRight;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 220,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ListView.builder(
+            controller: _controller,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemCount: widget.places.length,
+            itemBuilder: (context, index) =>
+                PlaceCard(place: widget.places[index]),
+          ),
+          if (kIsWeb) ...[
+            Positioned(
+              left: 4,
+              child: IgnorePointer(
+                ignoring: !_canScrollLeft,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _canScrollLeft ? 1.0 : 0.0,
+                  child: _ChatNavButton(
+                    icon: Icons.chevron_left,
+                    onTap: () => _scrollTo(_controller.offset - _step),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: 4,
+              child: IgnorePointer(
+                ignoring: !_canScrollRight,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _canScrollRight ? 1.0 : 0.0,
+                  child: _ChatNavButton(
+                    icon: Icons.chevron_right,
+                    onTap: () => _scrollTo(_controller.offset + _step),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatNavButton extends StatelessWidget {
+  // ignore: unused_element_parameter
+  const _ChatNavButton({super.key, required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 40 / 255),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+      ),
     );
   }
 }

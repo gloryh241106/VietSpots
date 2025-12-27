@@ -59,6 +59,9 @@ class ApiService {
     _userId = userId;
   }
 
+  /// Expose the current user id (if set) for other services to use
+  String? get userId => _userId;
+
   /// Set access token for Supabase authentication
   void setAccessToken(String? token) {
     _accessToken = token;

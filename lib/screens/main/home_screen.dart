@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:vietspots/providers/auth_provider.dart';
 import 'package:vietspots/providers/localization_provider.dart';
@@ -264,7 +265,73 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildHorizontalList(BuildContext context, List places) {
-    // Light background container to make content feel slightly raised.
+    return HorizontalPlacesCarousel(places: places);
+  }
+}
+
+class HorizontalPlacesCarousel extends StatefulWidget {
+  const HorizontalPlacesCarousel({super.key, required this.places});
+
+  final List places;
+
+  @override
+  State<HorizontalPlacesCarousel> createState() =>
+      _HorizontalPlacesCarouselState();
+}
+
+class _HorizontalPlacesCarouselState extends State<HorizontalPlacesCarousel> {
+  final ScrollController _controller = ScrollController();
+
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+
+  double get _scrollStep => 240.0; // approximate card width + spacing
+
+  void _scrollTo(double offset) {
+    final target = offset.clamp(
+      0.0,
+      _controller.position.hasContentDimensions
+          ? _controller.position.maxScrollExtent
+          : double.infinity,
+    );
+    _controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _updateNavVisibility() {
+    if (!_controller.hasClients) return;
+    final max = _controller.position.maxScrollExtent;
+    final off = _controller.offset;
+    final canLeft = off > 8.0; // small epsilon
+    final canRight = off < (max - 8.0);
+    if (canLeft != _canScrollLeft || canRight != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = canLeft;
+        _canScrollRight = canRight;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_updateNavVisibility);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_updateNavVisibility);
+    // ensure initial visibility after first layout
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateNavVisibility());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -275,14 +342,61 @@ class HomeScreen extends StatelessWidget {
         ),
         child: SizedBox(
           height: 220,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: places.length,
-            itemBuilder: (context, index) {
-              return PlaceCard(place: places[index]);
-            },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ListView.builder(
+                controller: _controller,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: widget.places.length,
+                itemBuilder: (context, index) {
+                  return PlaceCard(place: widget.places[index]);
+                },
+              ),
+              if (kIsWeb) ...[
+                if (_canScrollLeft)
+                  Positioned(
+                    left: 8,
+                    child: _NavButton(
+                      icon: Icons.chevron_left,
+                      onTap: () => _scrollTo(_controller.offset - _scrollStep),
+                    ),
+                  ),
+                if (_canScrollRight)
+                  Positioned(
+                    right: 8,
+                    child: _NavButton(
+                      icon: Icons.chevron_right,
+                      onTap: () => _scrollTo(_controller.offset + _scrollStep),
+                    ),
+                  ),
+              ],
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 40 / 255),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Icon(icon, color: Colors.white, size: 28),
         ),
       ),
     );

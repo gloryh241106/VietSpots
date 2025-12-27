@@ -14,7 +14,7 @@ import 'package:vietspots/services/image_service.dart';
 import 'package:vietspots/services/place_service.dart';
 import 'package:vietspots/services/chat_service.dart';
 import 'package:vietspots/services/storage_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide Provider;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:vietspots/services/auth_service.dart';
 import 'package:vietspots/utils/theme.dart';
 

@@ -227,6 +227,20 @@ class ChatProvider with ChangeNotifier {
 
     // Save message to Supabase (fire and forget)
     _saveChatMessage(userMsg, conv.id);
+    try {
+      final uid = _chatService.getCurrentUserId() ?? 'anonymous';
+      _chatService.saveMessage(
+        ChatMessageSaveRequest(
+          sessionId: conv.id,
+          userId: uid,
+          message: userMsg.text,
+          isUser: true,
+          timestamp: userMsg.timestamp,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Failed to send user message to Supabase: $e');
+    }
 
     // Call real backend API
     _generateBotResponse(text);
@@ -327,8 +341,22 @@ class ChatProvider with ChangeNotifier {
 
       _messages.add(botMsg);
 
-      // Save bot response to Supabase (fire and forget)
+      // Save bot response to local storage and Supabase (fire and forget)
       _saveChatMessage(botMsg, _activeConversationId ?? 'default-session');
+      try {
+        final uid = _chatService.getCurrentUserId() ?? 'anonymous';
+        _chatService.saveMessage(
+          ChatMessageSaveRequest(
+            sessionId: _activeConversationId ?? 'default-session',
+            userId: uid,
+            message: botMsg.text,
+            isUser: false,
+            timestamp: botMsg.timestamp,
+          ),
+        );
+      } catch (e) {
+        debugPrint('Failed to send bot message to Supabase: $e');
+      }
     } catch (e) {
       // Debug: Log the actual error
       debugPrint('❌ Chat API Error: $e');
