@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:vietspots/providers/auth_provider.dart';
 import 'package:vietspots/providers/chat_provider.dart';
 import 'package:vietspots/providers/localization_provider.dart';
@@ -19,6 +20,15 @@ import 'package:vietspots/utils/theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables from .env (don't crash if missing)
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    // Log and continue; .env may not be present on the device build.
+    // The app should still run and can rely on defaults or remote config.
+    debugPrint('dotenv.load() failed: $e');
+  }
 
   // Initialize API services
   final apiService = ApiService();

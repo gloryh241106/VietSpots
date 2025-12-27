@@ -1,15 +1,35 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+// Compile-time fallbacks when building with `--dart-define`.
+const String _kSupabaseUrlDefine = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+const String _kSupabaseAnonKeyDefine = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 
 /// Supabase Auth configuration
 /// Bạn cần lấy các giá trị này từ Supabase project của bạn
 class SupabaseConfig {
   /// Supabase project URL
-  static const String supabaseUrl = 'https://aaezaowgeonxzpcafesa.supabase.co';
+  static String get supabaseUrl {
+    try {
+      final v = dotenv.env['SUPABASE_URL'];
+      if (v != null && v.isNotEmpty) return v;
+    } catch (_) {}
+
+    if (_kSupabaseUrlDefine.isNotEmpty) return _kSupabaseUrlDefine;
+    return '';
+  }
 
   /// Supabase anon/public key
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhZXphb3dnZW9ueHpwY2FmZXNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwOTI1OTgsImV4cCI6MjA4MDY2ODU5OH0.JTrQP9YYT6yek8hL663yN_P-qjcSmIlGy0EiBPMqgSo';
+  static String get supabaseAnonKey {
+    try {
+      final v = dotenv.env['SUPABASE_ANON_KEY'];
+      if (v != null && v.isNotEmpty) return v;
+    } catch (_) {}
+
+    if (_kSupabaseAnonKeyDefine.isNotEmpty) return _kSupabaseAnonKeyDefine;
+    return '';
+  }
 
   /// Auth endpoints
   static String get authUrl => '$supabaseUrl/auth/v1';

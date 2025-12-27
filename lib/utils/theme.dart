@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+// Avoid importing google_fonts at app startup to prevent AssetManifest errors.
 
 class AppTheme {
   static const Color primaryRed = Color(0xFFD32F2F);
@@ -19,7 +19,7 @@ class AppTheme {
       surface: Colors.white,
     ),
     // Noto Sans has much better glyph coverage for multi-language UI.
-    textTheme: GoogleFonts.notoSansTextTheme(),
+    textTheme: _safeTextTheme(),
     appBarTheme: const AppBarTheme(
       backgroundColor: primaryRed,
       foregroundColor: Colors.white,
@@ -48,7 +48,7 @@ class AppTheme {
       secondary: accentYellow,
       surface: cardDark,
     ),
-    textTheme: GoogleFonts.notoSansTextTheme(ThemeData.dark().textTheme),
+    textTheme: _safeTextTheme(ThemeData.dark()),
     appBarTheme: const AppBarTheme(
       backgroundColor: Color(0xFF1E1E1E),
       foregroundColor: Colors.white,
@@ -66,4 +66,11 @@ class AppTheme {
       insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 120),
     ),
   );
+}
+
+/// Returns a safe text theme, falling back to default if GoogleFonts fails.
+TextTheme _safeTextTheme([ThemeData? base]) {
+  // Don't attempt to load external font assets during Theme construction.
+  // Return the provided base textTheme or a default one.
+  return base?.textTheme ?? ThemeData.light().textTheme;
 }
