@@ -151,6 +151,7 @@ class LocalizationProvider with ChangeNotifier {
       'edit_profile': 'Edit Profile',
       'change_avatar': 'Change Avatar',
       'full_name': 'Full Name',
+      'introduction': 'Introduction',
       'full_name_required': 'Full Name is required',
       'next': 'Next',
 
@@ -204,6 +205,7 @@ class LocalizationProvider with ChangeNotifier {
       'rating': 'Rating',
       'reviews': 'reviews',
       'no_reviews_yet': 'No reviews yet.',
+      'home.load_more': 'Load more',
       'add_review': 'Add Review',
       'review_hint': 'Write your review...',
       'review_required': 'Review text is required',
@@ -383,6 +385,7 @@ class LocalizationProvider with ChangeNotifier {
       'edit_profile': 'Chỉnh sửa hồ sơ',
       'change_avatar': 'Đổi ảnh đại diện',
       'full_name': 'Họ và tên',
+      'introduction': 'Giới thiệu',
       'full_name_required': 'Vui lòng nhập họ và tên',
       'next': 'Tiếp theo',
 
@@ -436,6 +439,7 @@ class LocalizationProvider with ChangeNotifier {
       'rating': 'Đánh giá',
       'reviews': 'đánh giá',
       'no_reviews_yet': 'Chưa có đánh giá.',
+      'home.load_more': 'Xem thêm',
       'add_review': 'Thêm đánh giá',
       'review_hint': 'Viết đánh giá của bạn...',
       'review_required': 'Vui lòng nhập nội dung đánh giá',

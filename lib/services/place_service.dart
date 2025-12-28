@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 import '../models/place_model.dart';
 
@@ -58,7 +59,28 @@ class PlaceDTO {
       website: json['website'],
       category: json['category'],
       rating: (json['rating'] as num?)?.toDouble(),
-      ratingCount: json['rating_count'],
+      ratingCount: (() {
+        // Check multiple possible keys that backend (and web) may use.
+        final raw =
+            json['rating_count'] ??
+            json['ratingCount'] ??
+            json['total_comments'] ??
+            json['totalComments'] ??
+            json['comments_count'] ??
+            json['comment_count'];
+        // Debugging removed: normalized parsing only
+        if (raw == null) {
+          // If explicit rating_count missing, prefer explicit comments array length
+          if (json['comments'] is List) {
+            return (json['comments'] as List).length;
+          }
+          return null;
+        }
+        if (raw is int) return raw;
+        if (raw is num) return raw.toInt();
+        if (raw is String) return int.tryParse(raw);
+        return null;
+      })(),
       latitude: (lat as num).toDouble(),
       longitude: (lon as num).toDouble(),
       openingHours: json['opening_hours'] is Map
@@ -84,8 +106,16 @@ class PlaceDTO {
           : (json['comments'] is String
                 ? (jsonDecode(json['comments']) as List<dynamic>?)
                 : null),
-      commentCount:
-          (json['comment_count'] as int?) ?? (json['comments_count'] as int?),
+      // Prefer `total_comments` (used by web client), then explicit comment_count fields
+      commentCount: (() {
+        final tc = json['total_comments'] ?? json['totalComments'];
+        if (tc is int) return tc;
+        if (tc is num) return tc.toInt();
+        if (tc is String) return int.tryParse(tc);
+        final cc =
+            (json['comment_count'] as int?) ?? (json['comments_count'] as int?);
+        return cc;
+      })(),
       // Chat-specific fields from ChatbotOrchestrator
       weather: json['weather'] is Map ? json['weather'] : null,
       score: (json['score'] as num?)?.toDouble(),
@@ -318,22 +348,34 @@ class PlaceDTO {
     }
 
     // Prefer actual parsed comments when available; otherwise fall back to
-    // provided `commentCount` from the backend. This avoids showing an
-    // incorrect count when the DTO includes actual comment objects.
+    // provided `commentCount` or `rating_count` from the backend. This
+    // avoids showing an incorrect count when the DTO includes actual
+    // comment objects but also supports backends that only provide
+    // `rating_count`.
     final effectiveCommentCount = parsedComments.isNotEmpty
         ? parsedComments.length
-        : (commentCount ?? 0);
+        : (commentCount ?? ratingCount ?? 0);
+
+    // Choose thumbnail: prefer explicit images array, otherwise fall back
+    // to the first comment image when available (helps when list endpoints
+    // omit `images` but comments contain images).
+    final thumbnail = (images?.isNotEmpty == true)
+        ? images!.first
+        : (parsedComments.isNotEmpty && parsedComments.first.imagePath != null)
+        ? parsedComments.first.imagePath!
+        : '';
 
     return Place(
       id: id,
       nameLocalized: {'vi': name, 'en': name},
-      imageUrl: images?.isNotEmpty == true ? images!.first : '',
+      imageUrl: thumbnail,
       rating: rating ?? 0.0,
       location: address ?? '',
       descriptionLocalized: about != null
           ? {'vi': _formatAbout(about!), 'en': _formatAbout(about!)}
           : null,
       commentCount: effectiveCommentCount,
+      ratingCount: ratingCount ?? 0,
       latitude: latitude,
       longitude: longitude,
       price: null,
@@ -381,20 +423,32 @@ class PlaceService {
       return (response as List).map((e) => PlaceDTO.fromJson(e)).toList();
     }
 
-    final response = await _api.get(
-      '/places',
-      queryParams: {
-        'skip': skip,
-        'limit': limit,
-        if (lat != null) 'lat': lat,
-        if (lon != null) 'lon': lon,
-        if (maxDistance != null) 'max_distance': maxDistance,
-        if (location != null) 'location': location,
-        if (categories != null) 'categories': categories,
-        if (minRating != null) 'min_rating': minRating,
-        'sort_by': sortBy,
-      },
-    );
+    final queryParams = {
+      'skip': skip,
+      'limit': limit,
+      if (lat != null) 'lat': lat,
+      if (lon != null) 'lon': lon,
+      if (maxDistance != null) 'max_distance': maxDistance,
+      if (location != null) 'location': location,
+      if (categories != null) 'categories': categories,
+      if (minRating != null) 'min_rating': minRating,
+      'sort_by': sortBy,
+    };
+
+    final response = await _api.get('/places', queryParams: queryParams);
+
+    // Temporary debug logging: snapshot request/response
+    try {
+      debugPrint('API GET /places request: ${jsonEncode(queryParams)}');
+      if (response is List) {
+        debugPrint('Places returned: ${response.length}');
+        if (response.isNotEmpty) {
+          debugPrint('First place sample: ${jsonEncode(response.first)}');
+        }
+      } else {
+        debugPrint('Places response body: ${jsonEncode(response)}');
+      }
+    } catch (_) {}
 
     return (response as List).map((e) => PlaceDTO.fromJson(e)).toList();
   }
@@ -419,6 +473,15 @@ class PlaceService {
         'limit': limit,
       },
     );
+
+    try {
+      debugPrint(
+        'API GET /places/nearby request: lat=$lat, lon=$lon, radius=$radius, limit=$limit',
+      );
+      if (response is List) {
+        debugPrint('Nearby places returned: ${response.length}');
+      }
+    } catch (_) {}
 
     return (response as List).map((e) => PlaceDTO.fromJson(e)).toList();
   }

@@ -6,6 +6,7 @@ class Place {
   final String location; // Coordinates or address
   final Map<String, String>? descriptionLocalized; // locale -> description
   final int commentCount;
+  final int? ratingCount;
   final double latitude;
   final double longitude;
   final String? price;
@@ -21,6 +22,7 @@ class Place {
     required this.location,
     this.descriptionLocalized,
     required this.commentCount,
+    this.ratingCount = 0,
     required this.latitude,
     required this.longitude,
     this.price,

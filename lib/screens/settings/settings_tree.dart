@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:io' as io;
+// ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -25,6 +26,7 @@ class _GeneralInfoScreenState extends State<GeneralInfoScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _introductionController = TextEditingController();
   int _age = 25;
   String _gender = 'Other';
 
@@ -36,9 +38,19 @@ class _GeneralInfoScreenState extends State<GeneralInfoScreen> {
       _nameController.text = user.name;
       _emailController.text = user.email;
       _phoneController.text = user.phone ?? '';
+      _introductionController.text = user.introduction ?? '';
       if (user.age != null) _age = user.age!;
       if (user.gender != null) _gender = user.gender!;
     }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _introductionController.dispose();
+    super.dispose();
   }
 
   Future<void> _changeAvatar() async {
@@ -200,6 +212,14 @@ class _GeneralInfoScreenState extends State<GeneralInfoScreen> {
                     },
                   ),
                   const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _introductionController,
+                    decoration: InputDecoration(
+                      labelText: loc.translate('introduction'),
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Text('${loc.translate('age')}: '),
@@ -244,21 +264,40 @@ class _GeneralInfoScreenState extends State<GeneralInfoScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         if (!_formKey.currentState!.validate()) return;
 
-                        // Save back to provider.
-                        Provider.of<AuthProvider>(
+                        final locLocal = loc; // capture before async gap
+                        final auth = Provider.of<AuthProvider>(
                           context,
                           listen: false,
-                        ).updateProfile(
+                        );
+
+                        final success = await auth.updateProfile(
                           name: _nameController.text.trim(),
                           email: _emailController.text.trim(),
                           phone: _phoneController.text.trim(),
+                          introduction: _introductionController.text.trim(),
                           age: _age,
                           gender: _gender,
                         );
-                        Navigator.pop(context);
+
+                        if (!mounted) return;
+
+                        final messenger = ScaffoldMessenger.of(context);
+                        if (success) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${locLocal.translate('save_changes')} ✓',
+                              ),
+                            ),
+                          );
+                          if (mounted) Navigator.pop(context);
+                        } else {
+                          final err = auth.errorMessage ?? 'Lỗi lưu thay đổi';
+                          messenger.showSnackBar(SnackBar(content: Text(err)));
+                        }
                       },
                       child: Text(loc.translate('save_changes')),
                     ),

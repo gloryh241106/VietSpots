@@ -91,7 +91,7 @@ class _SearchScreenState extends State<SearchScreen> {
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
         ),
         title: Container(
-          height: 48,
+          height: 52,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -99,12 +99,13 @@ class _SearchScreenState extends State<SearchScreen> {
           child: TextField(
             controller: _searchController,
             autofocus: true,
+            textAlignVertical: TextAlignVertical.center,
             decoration: InputDecoration(
               hintText: 'Search places...',
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 8,
+                vertical: 12,
               ),
               hintStyle: const TextStyle(color: Colors.grey),
               suffixIcon: _searchController.text.isNotEmpty
@@ -119,12 +120,6 @@ class _SearchScreenState extends State<SearchScreen> {
                     )
                   : null,
             ),
-            style: const TextStyle(color: Colors.black),
-            onChanged: (value) {
-              setState(() {
-                _filterPlaces(value);
-              });
-            },
           ),
         ),
       ),
@@ -180,9 +175,38 @@ class _SearchScreenState extends State<SearchScreen> {
                       place.localizedName(locale),
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    subtitle: Text(
-                      place.location,
-                      style: TextStyle(color: Colors.grey[600]),
+                    isThreeLine: true,
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          place.location,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.star,
+                              size: 14,
+                              color: Colors.amber[700],
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              place.rating.toStringAsFixed(1),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '(${place.commentCount})',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                     onTap: () {
                       Navigator.push(

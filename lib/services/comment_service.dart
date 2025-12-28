@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+
 import 'api_service.dart';
 import '../models/place_model.dart';
 
@@ -127,6 +130,24 @@ class CommentService {
       queryParams: {'limit': limit, 'offset': offset, 'order_by': orderBy},
     );
 
+    // Temporary debug logging: request/response snapshot for troubleshooting
+    try {
+      debugPrint(
+        'API GET /places/$placeId/comments?limit=$limit&offset=$offset&order_by=$orderBy',
+      );
+      debugPrint('Response type: ${response.runtimeType}');
+      if (response is List) {
+        debugPrint('Comments count: ${response.length}');
+        if (response.isNotEmpty) {
+          debugPrint('First comment (sample): ${jsonEncode(response.first)}');
+        }
+      } else {
+        debugPrint('Response body: ${jsonEncode(response)}');
+      }
+    } catch (_) {
+      // ignore logging errors
+    }
+
     return (response as List).map((e) => CommentDTO.fromJson(e)).toList();
   }
 
@@ -139,19 +160,81 @@ class CommentService {
     String? text,
     List<String> imageUrls = const [],
   }) async {
-    final response = await _api.post(
-      '/comments',
-      body: {
-        'place_id': placeId,
-        if (userId != null) 'user_id': userId,
-        'author_name': authorName,
-        'rating': rating,
-        if (text != null) 'text': text,
-        'image_urls': imageUrls,
-      },
-    );
+    // Client-side retry with exponential backoff to mitigate transient
+    // database timeouts or brief network issues. Will return a failure
+    // ApiResponse if all attempts fail.
+    const int maxAttempts = 3;
+    int attempt = 0;
+    while (true) {
+      attempt += 1;
+      try {
+        final requestBody = {
+          'place_id': placeId,
+          if (userId != null) 'user_id': userId,
+          'author_name': authorName,
+          'rating': rating,
+          if (text != null) 'text': text,
+          'image_urls': imageUrls,
+        };
 
-    return ApiResponse.fromJson(response, null);
+        debugPrint(
+          'API POST /comments request (attempt $attempt): ${jsonEncode(requestBody)}',
+        );
+
+        final response = await _api.post('/comments', body: requestBody);
+
+        try {
+          debugPrint(
+            'API POST /comments response (attempt $attempt): ${jsonEncode(response)}',
+          );
+        } catch (_) {}
+
+        final apiResp = ApiResponse.fromJson(response, null);
+
+        // If the create RPC didn't attach images for some reason, try attaching
+        // them via the dedicated endpoint as a fallback.
+        try {
+          final data = apiResp.data as Map<String, dynamic>?;
+          final commentId = data != null
+              ? (data['comment_id']?.toString())
+              : null;
+          final imagesCount = data != null
+              ? (data['images_count'] as int?) ?? 0
+              : 0;
+
+          if (apiResp.success &&
+              commentId != null &&
+              imageUrls.isNotEmpty &&
+              imagesCount == 0) {
+            try {
+              debugPrint('Attaching images to comment $commentId');
+              final attachResp = await _api.post(
+                '/comments/$commentId/images',
+                body: {'image_urls': imageUrls},
+              );
+              debugPrint('Attach images response: ${jsonEncode(attachResp)}');
+            } catch (e) {
+              debugPrint('Failed to attach images to comment $commentId: $e');
+            }
+          }
+        } catch (_) {}
+
+        return apiResp;
+      } catch (e) {
+        debugPrint(
+          'API POST /comments exception (attempt $attempt): ${e.toString()}',
+        );
+        // If we've exhausted retries, return a failed ApiResponse
+        if (attempt >= maxAttempts) {
+          return ApiResponse(success: false, message: e.toString());
+        }
+
+        // Wait with exponential backoff before retrying
+        final delayMs = 500 * (1 << (attempt - 1)); // 500ms, 1s, 2s
+        await Future.delayed(Duration(milliseconds: delayMs));
+        continue;
+      }
+    }
   }
 
   /// PUT /comments/{comment_id} - Update comment

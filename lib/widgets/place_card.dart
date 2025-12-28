@@ -24,13 +24,22 @@ class PlaceCard extends StatelessWidget {
       (p) => p.id == place.id,
       orElse: () => place,
     );
+    // Debug logs removed
+    // Prepare review display text: prefer backend `ratingCount` when > 0,
+    // otherwise fall back to `commentCount` (matches web behaviour).
+    final int displayCount =
+        (currentPlace.ratingCount != null && currentPlace.ratingCount! > 0)
+        ? currentPlace.ratingCount!
+        : currentPlace.commentCount;
+    final String reviewText = '$displayCount ${loc.translate('reviews')}';
 
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PlaceDetailScreen(place: place),
+            builder: (context) =>
+                PlaceDetailScreen(place: place, openComments: true),
           ),
         );
       },
@@ -217,7 +226,7 @@ class PlaceCard extends StatelessWidget {
 
                       Expanded(
                         child: Text(
-                          '${currentPlace.commentCount} ${loc.translate('reviews')}',
+                          reviewText,
                           style: AppTypography.bodySmall.copyWith(
                             color: AppTextColors.secondary(context),
                           ),
