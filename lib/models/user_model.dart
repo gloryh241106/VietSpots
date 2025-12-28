@@ -11,6 +11,7 @@ class UserModel {
   final String? gender;
   final List<String> preferences;
   final String? companionType;
+  final String? introduction;
 
   UserModel({
     required this.id,
@@ -25,6 +26,7 @@ class UserModel {
     this.gender,
     this.preferences = const [],
     this.companionType,
+    this.introduction,
   });
 
   UserModel copyWith({
@@ -39,6 +41,7 @@ class UserModel {
     String? gender,
     List<String>? preferences,
     String? companionType,
+    String? introduction,
   }) {
     return UserModel(
       id: id,
@@ -53,6 +56,7 @@ class UserModel {
       gender: gender ?? this.gender,
       preferences: preferences ?? this.preferences,
       companionType: companionType ?? this.companionType,
+      introduction: introduction ?? this.introduction,
     );
   }
 }

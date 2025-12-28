@@ -21,8 +21,13 @@ import 'package:vietspots/services/image_service.dart';
 
 class PlaceDetailScreen extends StatefulWidget {
   final Place place;
+  final bool openComments;
 
-  const PlaceDetailScreen({super.key, required this.place});
+  const PlaceDetailScreen({
+    super.key,
+    required this.place,
+    this.openComments = false,
+  });
 
   @override
   State<PlaceDetailScreen> createState() => _PlaceDetailScreenState();
@@ -30,20 +35,17 @@ class PlaceDetailScreen extends StatefulWidget {
 
 class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
   List<PlaceComment> _localComments = [];
+  final int _commentsLimit = 10;
+  int _commentsOffset = 0;
+  bool _hasMoreComments = false;
+  bool _isLoadingMore = false;
+  final GlobalKey _commentsSectionKey = GlobalKey();
   // Toggle to show per-chip icons (true = show small icons in chips)
   final bool _showChipIcons = true;
   @override
   void initState() {
     super.initState();
     _loadComments();
-  }
-
-  String _timeAgo(DateTime dateTime) {
-    final diff = DateTime.now().difference(dateTime);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
   }
 
   Future<void> _loadComments() async {
@@ -54,7 +56,11 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
         final provider = Provider.of<PlaceProvider>(context, listen: false);
         final contains = provider.places.any((p) => p.id == widget.place.id);
         if (contains) {
-          provider.setComments(widget.place.id, widget.place.comments);
+          provider.setComments(
+            widget.place.id,
+            widget.place.comments,
+            replaceCount: true,
+          );
         } else {
           setState(() {
             _localComments = widget.place.comments;
@@ -65,25 +71,51 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
 
       final api = Provider.of<ApiService>(context, listen: false);
       final service = CommentService(api);
-      final dtos = await service.getPlaceComments(widget.place.id, limit: 20);
+      // Load first page (10 comments) for detail view
+      final dtos = await service.getPlaceComments(
+        widget.place.id,
+        limit: _commentsLimit,
+        offset: 0,
+      );
       final comments = dtos.map((d) => d.toPlaceComment()).toList();
+      _commentsOffset = comments.length;
+      // Determine if there's likely more comments on server
+      _hasMoreComments =
+          (widget.place.ratingCount ?? widget.place.commentCount) >
+          _commentsOffset;
       if (mounted) {
         final provider = Provider.of<PlaceProvider>(context, listen: false);
         final contains = provider.places.any((p) => p.id == widget.place.id);
         if (contains) {
-          provider.setComments(widget.place.id, comments);
+          provider.setComments(widget.place.id, comments, replaceCount: true);
         } else {
           // Place not present in provider lists (e.g. came from Chat suggestions).
           // Keep comments locally so this screen can display them.
           setState(() {
             _localComments = comments;
           });
+          // If this screen was opened requesting comments, scroll to comments
+          if (widget.openComments) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              try {
+                if (_commentsSectionKey.currentContext != null) {
+                  Scrollable.ensureVisible(
+                    _commentsSectionKey.currentContext!,
+                    duration: const Duration(milliseconds: 400),
+                    alignment: 0.1,
+                  );
+                }
+              } catch (_) {}
+            });
+          }
         }
       }
       // Fallback: if backend reports reviews but we got no items, retry with larger limit
-      if (comments.isEmpty && widget.place.commentCount > 0) {
+      final backendCount =
+          widget.place.ratingCount ?? widget.place.commentCount;
+      if (comments.isEmpty && backendCount > 0) {
         try {
-          final retryLimit = widget.place.commentCount.clamp(5, 200);
+          final retryLimit = backendCount.clamp(5, 200).toInt();
           final dtos2 = await service.getPlaceComments(
             widget.place.id,
             limit: retryLimit,
@@ -95,10 +127,31 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
               (p) => p.id == widget.place.id,
             );
             if (contains) {
-              provider.setComments(widget.place.id, comments2);
+              provider.setComments(
+                widget.place.id,
+                comments2,
+                replaceCount: true,
+              );
             } else {
               setState(() {
                 _localComments = comments2;
+                _commentsOffset = comments2.length;
+                _hasMoreComments =
+                    (widget.place.ratingCount ?? widget.place.commentCount) >
+                    _commentsOffset;
+              });
+            }
+            if (widget.openComments) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                try {
+                  if (_commentsSectionKey.currentContext != null) {
+                    Scrollable.ensureVisible(
+                      _commentsSectionKey.currentContext!,
+                      duration: const Duration(milliseconds: 400),
+                      alignment: 0.1,
+                    );
+                  }
+                } catch (_) {}
               });
             }
           }
@@ -109,6 +162,50 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
     } catch (e) {
       // Silently ignore
       debugPrint('Failed to load comments: $e');
+    }
+  }
+
+  Future<void> _loadMoreComments() async {
+    if (_isLoadingMore) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final api = Provider.of<ApiService>(context, listen: false);
+      final service = CommentService(api);
+      final dtos = await service.getPlaceComments(
+        widget.place.id,
+        limit: _commentsLimit,
+        offset: _commentsOffset,
+      );
+      final more = dtos.map((d) => d.toPlaceComment()).toList();
+      if (more.isNotEmpty) {
+        final provider = Provider.of<PlaceProvider>(context, listen: false);
+        // Append to existing displayed comments
+        final contains = provider.places.any((p) => p.id == widget.place.id);
+        if (contains) {
+          // Get current comments from provider
+          final p = provider.places.firstWhere(
+            (p) => p.id == widget.place.id,
+            orElse: () => widget.place,
+          );
+          final merged = [...p.comments, ...more];
+          provider.setComments(widget.place.id, merged, replaceCount: true);
+        } else {
+          setState(() {
+            _localComments = [..._localComments, ...more];
+          });
+        }
+
+        _commentsOffset += more.length;
+        final backendCount =
+            widget.place.ratingCount ?? widget.place.commentCount;
+        _hasMoreComments = backendCount > _commentsOffset;
+      } else {
+        _hasMoreComments = false;
+      }
+    } catch (e) {
+      debugPrint('Failed to load more comments: $e');
+    } finally {
+      setState(() => _isLoadingMore = false);
     }
   }
 
@@ -287,8 +384,11 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                               (e) => e.id == widget.place.id,
                               orElse: () => widget.place,
                             );
+                            final topCount = (p.ratingCount ?? 0) > 0
+                                ? (p.ratingCount ?? 0)
+                                : p.commentCount;
                             return Text(
-                              '(${p.commentCount} ${loc.translate('reviews')})',
+                              '($topCount ${loc.translate('reviews')})',
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: Colors.grey[600]),
                             );
@@ -774,8 +874,11 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                               (e) => e.id == widget.place.id,
                               orElse: () => widget.place,
                             );
+                            final topCount = (p.ratingCount ?? 0) > 0
+                                ? (p.ratingCount ?? 0)
+                                : p.commentCount;
                             return Text(
-                              '(${p.commentCount} ${loc.translate('reviews')})',
+                              '($topCount ${loc.translate('reviews')})',
                               style: Theme.of(context).textTheme.bodySmall,
                             );
                           },
@@ -784,186 +887,182 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    Consumer<PlaceProvider>(
-                      builder: (context, provider, _) {
-                        final p = provider.places.firstWhere(
-                          (e) => e.id == widget.place.id,
-                          orElse: () => widget.place,
-                        );
-                        final commentsToShow = p.comments.isNotEmpty
-                            ? p.comments
-                            : _localComments;
-                        if (commentsToShow.isEmpty) {
-                          return Text(loc.translate('no_reviews_yet'));
-                        }
-
-                        // Render each comment inside a bordered card. Avatar is
-                        // placed at the top-left of the card (not vertically
-                        // centered) to match the requested layout.
-                        return Column(
-                          children: commentsToShow.reversed.map((c) {
-                            final imagePath = c.imagePath;
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 8.0),
-                              padding: const EdgeInsets.all(12.0),
-                              decoration: BoxDecoration(
-                                color:
-                                    Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? Colors.grey[850]
-                                    : Colors.white,
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 1,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                    // Simplified comments rendering to avoid deep nesting and parsing issues
+                    Container(
+                      key: _commentsSectionKey,
+                      child: Consumer<PlaceProvider>(
+                        builder: (context, provider, _) {
+                          final p = provider.places.firstWhere(
+                            (e) => e.id == widget.place.id,
+                            orElse: () => widget.place,
+                          );
+                          var commentsToShow = p.comments.isNotEmpty
+                              ? p.comments
+                              : _localComments;
+                          // Do not truncate comments in the detail screen —
+                          // always show what we have and let pagination handle loading more.
+                          if (commentsToShow.isEmpty) {
+                            return Text(loc.translate('no_reviews_yet'));
+                          }
+                          final backendCount = p.ratingCount ?? p.commentCount;
+                          final canLoadMore =
+                              _hasMoreComments ||
+                              backendCount > commentsToShow.length;
+                          return Column(
+                            children: [
+                              ...commentsToShow.reversed.map((c) {
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
+                                  padding: const EdgeInsets.all(12.0),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.grey[850]
+                                        : Colors.white,
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                      width: 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      CircleAvatar(
-                                        radius: 20,
-                                        child: Text(
-                                          c.author.isNotEmpty
-                                              ? c.author[0]
-                                              : '?',
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
+                                      Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 18,
+                                            child: Text(
+                                              c.author.isNotEmpty
+                                                  ? c.author[0]
+                                                  : '?',
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    c.author.isNotEmpty
-                                                        ? c.author
-                                                        : 'Anonymous',
-                                                    style: AppTypography
-                                                        .titleMedium,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
                                                 Text(
-                                                  _timeAgo(c.timestamp),
-                                                  style: AppTypography.caption
-                                                      .copyWith(
-                                                        color:
-                                                            AppTextColors.secondary(
-                                                              context,
-                                                            ),
-                                                      ),
+                                                  c.author.isNotEmpty
+                                                      ? c.author
+                                                      : 'Anonymous',
+                                                  style:
+                                                      AppTypography.titleMedium,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 6),
-                                            Row(
-                                              children: [
-                                                for (
-                                                  int i = 0;
-                                                  i < c.rating;
-                                                  i++
-                                                )
-                                                  const Icon(
-                                                    Icons.star,
-                                                    size: 16,
-                                                    color: Colors.amber,
+                                                const SizedBox(height: 6),
+                                                Text(c.text),
+                                                const SizedBox(height: 8),
+                                                if (c.imagePath != null)
+                                                  Builder(
+                                                    builder: (_) {
+                                                      final url = c.imagePath!;
+                                                      if (url.startsWith(
+                                                            'http',
+                                                          ) ||
+                                                          url.startsWith(
+                                                            'data:',
+                                                          )) {
+                                                        return SizedBox(
+                                                          height: 160,
+                                                          child: ClipRRect(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  8,
+                                                                ),
+                                                            child: CachedNetworkImage(
+                                                              imageUrl: url,
+                                                              fit: BoxFit.cover,
+                                                              width: double
+                                                                  .infinity,
+                                                              placeholder:
+                                                                  (
+                                                                    c,
+                                                                    u,
+                                                                  ) => Container(
+                                                                    color: Colors
+                                                                        .grey[200],
+                                                                  ),
+                                                              errorWidget:
+                                                                  (
+                                                                    c,
+                                                                    u,
+                                                                    e,
+                                                                  ) => Container(
+                                                                    color: Colors
+                                                                        .grey[200],
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                      try {
+                                                        final f = File(url);
+                                                        return SizedBox(
+                                                          height: 160,
+                                                          child: ClipRRect(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  8,
+                                                                ),
+                                                            child: Image.file(
+                                                              f,
+                                                              fit: BoxFit.cover,
+                                                              width: double
+                                                                  .infinity,
+                                                            ),
+                                                          ),
+                                                        );
+                                                      } catch (_) {
+                                                        return const SizedBox.shrink();
+                                                      }
+                                                    },
                                                   ),
                                               ],
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(c.text),
-                                  if (imagePath != null &&
-                                      imagePath.trim().isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Builder(
-                                        builder: (context) {
-                                          // imagePath may be a network URL, data URI, or local file path
-                                          if (imagePath.startsWith('http')) {
-                                            return CachedNetworkImage(
-                                              imageUrl: imagePath,
-                                              height: 160,
-                                              width: double.infinity,
-                                              fit: BoxFit.cover,
-                                              placeholder: (c, u) => Container(
-                                                height: 160,
-                                                color: Colors.grey[200],
+                                );
+                              }),
+                              if (canLoadMore)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Center(
+                                    child: TextButton(
+                                      onPressed: _isLoadingMore
+                                          ? null
+                                          : _loadMoreComments,
+                                      child: _isLoadingMore
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
                                               ),
-                                              errorWidget: (c, u, e) =>
-                                                  const SizedBox.shrink(),
-                                            );
-                                          }
-
-                                          if (imagePath.startsWith('data:')) {
-                                            try {
-                                              final base64Str = imagePath
-                                                  .split(',')
-                                                  .last;
-                                              final bytes = base64Decode(
-                                                base64Str,
-                                              );
-                                              return Image.memory(
-                                                bytes,
-                                                height: 160,
-                                                width: double.infinity,
-                                                fit: BoxFit.cover,
-                                                errorBuilder:
-                                                    (
-                                                      context,
-                                                      error,
-                                                      stackTrace,
-                                                    ) =>
-                                                        const SizedBox.shrink(),
-                                              );
-                                            } catch (_) {
-                                              return const SizedBox.shrink();
-                                            }
-                                          }
-
-                                          // Fallback: local file (mobile)
-                                          try {
-                                            return Image.file(
-                                              File(imagePath),
-                                              height: 160,
-                                              width: double.infinity,
-                                              fit: BoxFit.cover,
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                    return const SizedBox.shrink();
-                                                  },
-                                            );
-                                          } catch (_) {
-                                            return const SizedBox.shrink();
-                                          }
-                                        },
-                                      ),
+                                            )
+                                          : Text(
+                                              Provider.of<LocalizationProvider>(
+                                                context,
+                                                listen: false,
+                                              ).translate('home.load_more'),
+                                            ),
                                     ),
-                                  ],
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        );
-                      },
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
 
                     const SizedBox(height: 120),
@@ -1367,12 +1466,16 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (icon != null) ...[
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Icon(icon, size: 14, color: Colors.redAccent),
+            SizedBox(
+              width: 20,
+              child: Center(
+                child: Icon(icon, size: 16, color: Colors.redAccent),
+              ),
             ),
+            const SizedBox(width: 6),
           ],
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxTextWidth),
@@ -1737,12 +1840,49 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
       );
 
       if (!response.success) {
-        debugPrint('Failed to save comment: ${response.message}');
+        // Show user-friendly message and suggest retry.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Không thể lưu bình luận: ${response.message}'),
+          ),
+        );
       } else {
-        debugPrint('Comment saved successfully');
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Bình luận đã được lưu')));
+        // Refresh first page of comments from server to get server-side timestamp/images
+        try {
+          final api2 = Provider.of<ApiService>(
+            widget.rootContext,
+            listen: false,
+          );
+          final service2 = CommentService(api2);
+          final dtos = await service2.getPlaceComments(
+            widget.placeId,
+            limit: 10,
+            offset: 0,
+          );
+          final comments = dtos.map((d) => d.toPlaceComment()).toList();
+          final provider = Provider.of<PlaceProvider>(
+            widget.rootContext,
+            listen: false,
+          );
+          final contains = provider.places.any((p) => p.id == widget.placeId);
+          if (contains) {
+            provider.setComments(widget.placeId, comments, replaceCount: true);
+          }
+        } catch (e) {
+          debugPrint('Failed to refresh comments after create: $e');
+        }
       }
     } catch (e) {
       debugPrint('Error saving comment to backend: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lỗi khi lưu bình luận: $e')));
     }
   }
 

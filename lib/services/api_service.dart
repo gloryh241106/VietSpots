@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
-import 'dart:typed_data';
+// dart:typed_data not required; `package:flutter/foundation.dart` provides needed types
+// removed unused import
 
 /// Base API configuration
 class ApiConfig {
@@ -90,6 +92,9 @@ class ApiService {
       final response = await _client
           .get(uri, headers: _headers)
           .timeout(ApiConfig.timeout);
+
+      // Proceed to handle response normally
+
       return _handleResponse(response);
     } on SocketException {
       throw ApiException(statusCode: 0, message: 'No internet connection');
@@ -224,6 +229,8 @@ class ApiService {
     // Decode response body as UTF-8 to properly handle Vietnamese characters
     final bodyString = utf8.decode(response.bodyBytes);
     final body = bodyString.isNotEmpty ? jsonDecode(bodyString) : null;
+
+    // Removed debug-only checks
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;

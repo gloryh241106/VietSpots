@@ -99,36 +99,69 @@ class PlaceProvider extends ChangeNotifier {
 
   // Manage comments in-memory
   void addComment(String placeId, PlaceComment comment) {
-    final idx = _places.indexWhere((p) => p.id == placeId);
-    if (idx == -1) return;
-    final place = _places[idx];
-    final updated = Place(
-      id: place.id,
-      nameLocalized: place.nameLocalized,
-      imageUrl: place.imageUrl,
-      rating:
-          ((place.rating * place.commentCount) + comment.rating) /
-          (place.commentCount + 1),
-      location: place.location,
-      descriptionLocalized: place.descriptionLocalized,
-      commentCount: place.commentCount + 1,
-      latitude: place.latitude,
-      longitude: place.longitude,
-      price: place.price,
-      openingTime: place.openingTime,
-      website: place.website,
-      comments: [...place.comments, comment],
-    );
-    _places[idx] = updated;
+    // Update the place entry in all lists where it appears so UI stays consistent.
+    void updateInList(List<Place> list) {
+      final i = list.indexWhere((p) => p.id == placeId);
+      if (i == -1) return;
+      final place = list[i];
+      List<PlaceComment> merged = [...place.comments, comment];
+      // Deduplicate by id while preserving order (keep first occurrence)
+      final seen = <String>{};
+      merged = merged.where((c) => seen.add(c.id)).toList();
+
+      final updated = Place(
+        id: place.id,
+        nameLocalized: place.nameLocalized,
+        imageUrl: place.imageUrl,
+        // Recalculate average rating using existing commentCount
+        rating:
+            ((place.rating * place.commentCount) + comment.rating) /
+            (place.commentCount + 1),
+        location: place.location,
+        descriptionLocalized: place.descriptionLocalized,
+        commentCount: place.commentCount + 1,
+        // Preserve ratingCount if backend provided it so we don't hide it
+        ratingCount: place.ratingCount,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        price: place.price,
+        openingTime: place.openingTime,
+        website: place.website,
+        comments: merged,
+      );
+      list[i] = updated;
+    }
+
+    updateInList(_places);
+    updateInList(_nearbyPlaces);
+    updateInList(_recommendedPlaces);
+    updateInList(_visitedPlaces);
     notifyListeners();
   }
 
-  void setComments(String placeId, List<PlaceComment> comments) {
+  void setComments(
+    String placeId,
+    List<PlaceComment> comments, {
+    bool replaceCount = false,
+  }) {
     // Update comments in any lists that may contain this place
     void updateInList(List<Place> list) {
       final i = list.indexWhere((p) => p.id == placeId);
       if (i == -1) return;
       final p = list[i];
+      final mergedComments = () {
+        // For preview loads (replaceCount == false) prefer keeping the
+        // existing comment list if it's larger than the preview returned
+        // by the server. This avoids overwriting a locally-added comment
+        // or a previously-fetched full list with a short preview (limit=3).
+        if (!replaceCount) {
+          if (p.comments.length >= comments.length) return p.comments;
+        }
+        // Ensure unique comments (server may return overlapping pages)
+        final seen = <String>{};
+        return comments.where((c) => seen.add(c.id)).toList();
+      }();
+
       final updated = Place(
         id: p.id,
         nameLocalized: p.nameLocalized,
@@ -136,13 +169,18 @@ class PlaceProvider extends ChangeNotifier {
         rating: p.rating,
         location: p.location,
         descriptionLocalized: p.descriptionLocalized,
-        commentCount: comments.length,
+        // Only replace the recorded comment count when explicitly requested
+        // (e.g. when loading full comments in detail screen). For preview
+        // loads (limit=3) we preserve the backend-provided commentCount so
+        // the UI shows the total reviews like the web client.
+        commentCount: replaceCount ? comments.length : p.commentCount,
+        ratingCount: p.ratingCount,
         latitude: p.latitude,
         longitude: p.longitude,
         price: p.price,
         openingTime: p.openingTime,
         website: p.website,
-        comments: comments,
+        comments: mergedComments,
       );
       list[i] = updated;
     }
@@ -258,9 +296,15 @@ class PlaceProvider extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 30));
 
-      // Convert all DTOs to Place objects
-      final allPlaces = dtos.map((dto) => dto.toPlace()).toList();
+      // Convert all DTOs to Place objects and preserve existing fields
+      final allPlaces = dtos
+          .map((dto) => dto.toPlace())
+          .map((newP) => _mergePreserveFields(newP))
+          .toList();
       debugPrint('Loaded ${allPlaces.length} places near user location');
+
+      // Debug: print rating/comment counts for each loaded place
+      // Removed per-place debug logging
 
       _places = allPlaces;
 
@@ -311,16 +355,24 @@ class PlaceProvider extends ChangeNotifier {
 
     try {
       // Request nearby places with actual ratings (minRating filters nulls)
-      final dtos = await _placeService.getNearbyPlaces(
+      // Use the same endpoint parameters as the web client: call /api/places
+      // with `max_distance` (maxDistance) so the backend returns the same
+      // `rating_count` metadata. This mirrors the web client's behavior and
+      // avoids discrepancies between `/places` and `/places/nearby`.
+      final dtos = await _placeService.getPlaces(
+        limit: 20,
         lat: _userPosition!.latitude,
         lon: _userPosition!.longitude,
-        radius: radius,
+        maxDistance: radius,
         minRating: 0.1,
-        limit: 20,
+        sortBy: 'distance',
       );
 
-      // Convert to Place objects
-      final places = dtos.map((dto) => dto.toPlace()).toList();
+      // Convert to Place objects and preserve cached fields where possible
+      final places = dtos
+          .map((dto) => dto.toPlace())
+          .map((p) => _mergePreserveFields(p))
+          .toList();
       debugPrint('Loaded ${places.length} nearby places');
 
       // Backend already sorts by distance, just add rating as secondary sort
@@ -350,10 +402,10 @@ class PlaceProvider extends ChangeNotifier {
       try {
         final api = ApiService();
         final service = CommentService(api);
-        final dtos = await service.getPlaceComments(place.id, limit: 3);
+        final dtos = await service.getPlaceComments(place.id, limit: 10);
         final comments = dtos.map((d) => d.toPlaceComment()).toList();
-        // Use unified setter to ensure comments are applied to all relevant lists
-        setComments(place.id, comments);
+        // Preview load: do NOT replace the backend's total comment count.
+        setComments(place.id, comments, replaceCount: false);
       } catch (e) {
         debugPrint('Failed to load comments for place ${place.id}: $e');
         // Continue loading other places
@@ -398,6 +450,73 @@ class PlaceProvider extends ChangeNotifier {
       final sorted = List<Place>.from(places);
       sorted.sort((a, b) => b.commentCount.compareTo(a.commentCount));
       return sorted;
+    }
+  }
+
+  /// Merge incoming place with any cached copy to preserve fields that
+  /// may be absent from list endpoints (for example `ratingCount` or
+  /// recently-loaded `comments`). Prefers authoritative fields from
+  /// the incoming place but falls back to cached values when needed.
+  Place _mergePreserveFields(Place incoming) {
+    try {
+      Place? existing;
+      // Search all lists for an existing entry
+      for (final list in [
+        _places,
+        _nearbyPlaces,
+        _recommendedPlaces,
+        _visitedPlaces,
+      ]) {
+        final i = list.indexWhere((p) => p.id == incoming.id);
+        if (i != -1) {
+          existing = list[i];
+          break;
+        }
+      }
+
+      if (existing == null) return incoming;
+
+      final ratingCount =
+          (incoming.ratingCount != null && incoming.ratingCount! > 0)
+          ? incoming.ratingCount
+          : existing.ratingCount;
+
+      final commentCount = (incoming.commentCount > 0)
+          ? incoming.commentCount
+          : existing.commentCount;
+
+      final comments = (incoming.comments.isNotEmpty)
+          ? incoming.comments
+          : existing.comments;
+
+      return Place(
+        id: incoming.id,
+        nameLocalized: incoming.nameLocalized ?? existing.nameLocalized,
+        imageUrl: incoming.imageUrl.isNotEmpty
+            ? incoming.imageUrl
+            : existing.imageUrl,
+        rating: incoming.rating != 0 ? incoming.rating : existing.rating,
+        location: incoming.location.isNotEmpty
+            ? incoming.location
+            : existing.location,
+        descriptionLocalized:
+            incoming.descriptionLocalized ?? existing.descriptionLocalized,
+        commentCount: commentCount,
+        ratingCount: ratingCount ?? 0,
+        latitude: incoming.latitude != 0
+            ? incoming.latitude
+            : existing.latitude,
+        longitude: incoming.longitude != 0
+            ? incoming.longitude
+            : existing.longitude,
+        price: incoming.price ?? existing.price,
+        openingTime: incoming.openingTime ?? existing.openingTime,
+        website: incoming.website ?? existing.website,
+        comments: comments,
+      );
+    } catch (e) {
+      debugPrint('Failed to merge cached place fields for ${incoming.id}: $e');
+      return incoming;
     }
   }
 }

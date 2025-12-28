@@ -3,8 +3,14 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Compile-time fallbacks when building with `--dart-define`.
-const String _kSupabaseUrlDefine = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-const String _kSupabaseAnonKeyDefine = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+const String _kSupabaseUrlDefine = String.fromEnvironment(
+  'SUPABASE_URL',
+  defaultValue: '',
+);
+const String _kSupabaseAnonKeyDefine = String.fromEnvironment(
+  'SUPABASE_ANON_KEY',
+  defaultValue: '',
+);
 
 /// Supabase Auth configuration
 /// Bạn cần lấy các giá trị này từ Supabase project của bạn
@@ -461,6 +467,44 @@ class AuthService {
       return AuthResponse(
         success: false,
         message: body['error_description'] ?? body['msg'] ?? 'Lỗi cập nhật',
+      );
+    } catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'Lỗi kết nối: ${e.toString()}',
+      );
+    }
+  }
+
+  /// Upsert into Postgres `users` table via Supabase REST API.
+  /// Uses authenticated user token so RLS policies can apply.
+  Future<AuthResponse> upsertUserRecord(Map<String, dynamic> record) async {
+    if (_currentSession == null) {
+      return AuthResponse(success: false, message: 'Chưa đăng nhập');
+    }
+
+    try {
+      final uri = Uri.parse('${SupabaseConfig.supabaseUrl}/rest/v1/users');
+      final resp = await _client.post(
+        uri,
+        headers: {
+          ..._authHeaders,
+          // Allow upsert (merge duplicates) behavior
+          'Prefer': 'resolution=merge-duplicates',
+        },
+        body: jsonEncode(record),
+      );
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return AuthResponse(success: true);
+      }
+
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+      return AuthResponse(
+        success: false,
+        message: body != null && body['message'] != null
+            ? body['message']
+            : 'Lỗi upsert user',
       );
     } catch (e) {
       return AuthResponse(
