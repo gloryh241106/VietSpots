@@ -4,7 +4,7 @@ import 'package:vietspots/models/place_model.dart';
 import 'package:vietspots/providers/localization_provider.dart';
 import 'package:vietspots/providers/place_provider.dart';
 import 'package:vietspots/screens/detail/place_detail_screen.dart';
-import 'package:vietspots/utils/theme.dart';
+
 import 'package:vietspots/services/place_service.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -79,13 +79,9 @@ class _SearchScreenState extends State<SearchScreen> {
       context,
     ).locale.languageCode;
     return Scaffold(
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? AppTheme.backgroundDark
-          : AppTheme.backgroundLight,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1E1E1E)
-            : Colors.redAccent,
+        backgroundColor: Theme.of(context).primaryColor,
         elevation: 0,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
@@ -93,7 +89,7 @@ class _SearchScreenState extends State<SearchScreen> {
         title: Container(
           height: 52,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(20),
           ),
           child: TextField(
@@ -107,10 +103,15 @@ class _SearchScreenState extends State<SearchScreen> {
                 horizontal: 16,
                 vertical: 12,
               ),
-              hintStyle: const TextStyle(color: Colors.grey),
+              hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).dividerColor,
+              ),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.grey),
+                      icon: Icon(
+                        Icons.clear,
+                        color: Theme.of(context).dividerColor,
+                      ),
                       onPressed: () {
                         setState(() {
                           _searchController.clear();
@@ -128,7 +129,11 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.search_off, size: 64, color: Colors.grey),
+                  Icon(
+                    Icons.search_off,
+                    size: 64,
+                    color: Theme.of(context).dividerColor,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'Không tìm thấy địa điểm',
@@ -137,9 +142,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Thử tìm kiếm với từ khóa khác',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).dividerColor,
+                    ),
                   ),
                 ],
               ),

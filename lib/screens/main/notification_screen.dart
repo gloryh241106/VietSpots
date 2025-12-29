@@ -33,13 +33,13 @@ class NotificationScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1E1E1E)
-            : Colors.redAccent,
-        elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
+        backgroundColor: Theme.of(context).primaryColor,
+        elevation: 0,
         title: Text(
           loc.translate('notifications'),
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          style:
+              Theme.of(context).appBarTheme.titleTextStyle ??
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
       body: RefreshIndicator(
@@ -55,11 +55,7 @@ class NotificationScreen extends StatelessWidget {
             final isUnread = notif['isUnread'] as bool;
 
             return Container(
-              color: isUnread
-                  ? Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF1A1212)
-                        : const Color(0xFFFFF0F0)
-                  : Colors.transparent,
+              color: isUnread ? Theme.of(context).primaryColor.withValues(alpha: 0.06) : Colors.transparent,
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16.0,
@@ -68,11 +64,7 @@ class NotificationScreen extends StatelessWidget {
                 leading: Stack(
                   children: [
                     CircleAvatar(
-                      backgroundColor: isUnread
-                          ? Theme.of(
-                              context,
-                            ).primaryColor.withValues(alpha: 0.1)
-                          : Colors.grey.withValues(alpha: 0.1),
+                      backgroundColor: isUnread ? Theme.of(context).primaryColor.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
                       child: Icon(
                         isUnread
                             ? Icons.notifications_active
@@ -90,7 +82,7 @@ class NotificationScreen extends StatelessWidget {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: Colors.red,
+                            color: Theme.of(context).primaryColor,
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: Theme.of(context).scaffoldBackgroundColor,

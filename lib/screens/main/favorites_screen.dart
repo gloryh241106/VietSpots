@@ -15,13 +15,13 @@ class FavoritesScreen extends StatelessWidget {
     final locale = loc.locale.languageCode;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1E1E1E)
-            : Colors.redAccent,
-        elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
+        backgroundColor: Theme.of(context).primaryColor,
+        elevation: 0,
         title: Text(
           loc.translate('favorites_title'),
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          style:
+              Theme.of(context).appBarTheme.titleTextStyle ??
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
       body: Consumer<PlaceProvider>(
@@ -39,17 +39,13 @@ class FavoritesScreen extends StatelessWidget {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).primaryColor.withValues(alpha: 0.1),
+                        color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.favorite_border,
                         size: 64,
-                        color: Theme.of(
-                          context,
-                        ).primaryColor.withValues(alpha: 0.6),
+                        color: Theme.of(context).primaryColor.withValues(alpha: 0.6),
                       ),
                     ),
                     const SizedBox(height: 24),

@@ -97,7 +97,14 @@ class VietSpotsApp extends StatelessWidget {
             outboundQueue ?? OutboundQueue(),
           ),
         ),
-        ChangeNotifierProvider(create: (_) => PlaceProvider(placeService)),
+        ChangeNotifierProxyProvider<AuthProvider, PlaceProvider>(
+          create: (_) => PlaceProvider(placeService),
+          update: (context, auth, placeProvider) {
+            placeProvider ??= PlaceProvider(placeService);
+            placeProvider.updateAuthProvider(auth);
+            return placeProvider;
+          },
+        ),
         ChangeNotifierProvider(create: (_) => LocalizationProvider()),
       ],
       child: Consumer<ThemeProvider>(

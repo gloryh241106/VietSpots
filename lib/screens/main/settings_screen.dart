@@ -20,16 +20,13 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1E1E1E)
-            : Colors.redAccent,
-        elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
+        backgroundColor: Theme.of(context).primaryColor,
+        elevation: 0,
         title: Text(
           locProvider.translate('settings'),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
+          style:
+              Theme.of(context).appBarTheme.titleTextStyle ??
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
       body: ListView(
@@ -152,7 +149,10 @@ class SettingsScreen extends StatelessWidget {
               context,
               icon: Icons.language,
               title: locProvider.translate('language'),
-              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+              trailing: Icon(
+                Icons.chevron_right,
+                color: Theme.of(context).dividerColor,
+              ),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const LanguageScreen()),

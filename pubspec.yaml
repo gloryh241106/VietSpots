@@ -68,6 +68,10 @@ dependencies:
   mime: ^2.0.0
   # Parse MediaType for multipart content-type
   http_parser: ^4.0.0
+  # Recording and audio playback for STT/TTS
+  audioplayers: ^6.5.1
+  # Local speech-to-text (uses platform speech recognizer)
+  speech_to_text: ^7.3.0
   # WebView (use newer android plugin to satisfy AGP namespace requirement)
   webview_flutter: ^4.13.0
   webview_flutter_android: ^4.10.11

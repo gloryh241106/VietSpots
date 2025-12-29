@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:vietspots/models/place_model.dart';
+import 'dart:convert';
 import 'package:vietspots/services/place_service.dart';
 import 'package:vietspots/services/api_service.dart';
 import 'package:vietspots/services/comment_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:vietspots/services/auth_service.dart';
+import 'package:vietspots/providers/auth_provider.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// Favorites are persisted to Supabase; no local SharedPreferences usage
 
 class PlaceProvider extends ChangeNotifier {
   final PlaceService _placeService;
@@ -15,12 +19,22 @@ class PlaceProvider extends ChangeNotifier {
   final List<Place> _visitedPlaces =
       []; // Places user has actually visited/commented
   final Set<String> _favoriteIds = {};
+  AuthProvider? _authProvider;
+  // When Supabase REST returns 404 for the `favorites` table, the app
+  // should gracefully degrade: keep local toggles but avoid persisting.
+  bool _favoritesEnabled = true;
   bool _isLoading = false;
   String? _error;
   Position? _userPosition;
 
   PlaceProvider(this._placeService) {
     _initializeData();
+    // favorites are loaded when an AuthProvider is attached via
+    // `updateAuthProvider()` (set by a ProxyProvider in main.dart)
+  }
+
+  void updateAuthProvider(AuthProvider auth) {
+    _authProvider = auth;
     _loadFavorites();
   }
 
@@ -222,18 +236,65 @@ class PlaceProvider extends ChangeNotifier {
     return _favoriteIds.contains(id);
   }
 
+  /// Whether the Supabase-backed favorites feature is currently available.
+  bool get favoritesEnabled => _favoritesEnabled;
+
   Future<void> toggleFavorite(String id) async {
+    // If the Supabase-backed favorites feature is disabled on the server,
+    // allow local-only toggles so the UI remains responsive.
+    if (!_favoritesEnabled) {
+      if (_favoriteIds.contains(id)) {
+        _favoriteIds.remove(id);
+      } else {
+        _favoriteIds.add(id);
+      }
+      notifyListeners();
+      return;
+    }
+
+    // If user isn't logged in, allow a local-only toggle (no persistence).
+    if (_authProvider == null || !_authProvider!.isLoggedIn) {
+      debugPrint(
+        'toggleFavorite: user not logged in - storing favorite locally only',
+      );
+      if (_favoriteIds.contains(id)) {
+        _favoriteIds.remove(id);
+      } else {
+        _favoriteIds.add(id);
+      }
+      notifyListeners();
+      return;
+    }
+
+    final userId = _authProvider!.userId!;
+
     if (_favoriteIds.contains(id)) {
       _favoriteIds.remove(id);
       notifyListeners();
-      await _saveFavorites();
+      final ok = await _removeFavoriteFromSupabase(userId, id);
+      if (!ok) {
+        // If persistence failed because the table is missing, keep local state
+        // and mark the feature disabled to avoid repeated failing calls.
+        if (!_favoritesEnabled) {
+          return;
+        }
+        _favoriteIds.add(id);
+        notifyListeners();
+      }
       return;
     }
 
     // Add to favorites set first so UI updates immediately
     _favoriteIds.add(id);
     notifyListeners();
-    await _saveFavorites();
+    final ok = await _addFavoriteToSupabase(userId, id);
+    if (!ok) {
+      if (!_favoritesEnabled) {
+        return;
+      }
+      _favoriteIds.remove(id);
+      notifyListeners();
+    }
 
     // If the place isn't already loaded in memory, try to fetch details
     final exists = _places.any((p) => p.id == id);
@@ -251,27 +312,171 @@ class PlaceProvider extends ChangeNotifier {
     }
   }
 
-  static const String _prefsFavoritesKey = 'favorite_place_ids';
-
+  /// Load favorites for the current authenticated user from Supabase
   Future<void> _loadFavorites() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final ids = prefs.getStringList(_prefsFavoritesKey) ?? [];
-      _favoriteIds
-        ..clear()
-        ..addAll(ids);
-      notifyListeners();
+      if (_authProvider == null || !_authProvider!.isLoggedIn) {
+        _favoriteIds.clear();
+        notifyListeners();
+        return;
+      }
+
+      final userId = _authProvider!.userId!;
+      final token = _authProvider!.session?.accessToken;
+      if (token == null) {
+        debugPrint('No access token available for loading favorites');
+        return;
+      }
+
+      final uri = Uri.parse(
+        '${SupabaseConfig.supabaseUrl}/rest/v1/wishlists?user_id=eq.$userId&select=place_id',
+      );
+      final resp = await http
+          .get(
+            uri,
+            headers: {
+              'apikey': SupabaseConfig.supabaseAnonKey,
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (resp.statusCode == 404) {
+        debugPrint('Supabase wishlists table not found - disabling favorites');
+        _favoritesEnabled = false;
+        _favoriteIds.clear();
+        notifyListeners();
+        return;
+      }
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        List<String> ids = [];
+        try {
+          final parsed = json.decode(resp.body) as List<dynamic>;
+          ids = parsed
+              .map((e) => (e['place_id'] ?? '').toString())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        } catch (e) {
+          debugPrint('Failed to parse favorites response: $e');
+        }
+
+        _favoriteIds
+          ..clear()
+          ..addAll(ids);
+
+        // Ensure that any favorite IDs not currently loaded in `_places`
+        // are fetched so `favoritePlaces` returns concrete Place objects
+        // instead of an empty list when the app first starts.
+        final missing = _favoriteIds
+            .where((id) => !_places.any((p) => p.id == id))
+            .toList();
+        if (missing.isNotEmpty) {
+          try {
+            // Fetch details concurrently but tolerate individual failures.
+            final futures = missing.map((id) async {
+              try {
+                final dto = await _placeService.getPlace(id);
+                return dto.toPlace();
+              } catch (e) {
+                debugPrint('Failed to fetch favorite place $id: $e');
+                return null;
+              }
+            }).toList();
+
+            final results = await Future.wait(futures);
+            // Insert fetched places at the front so they appear in lists.
+            for (final place in results.whereType<Place>()) {
+              // Avoid duplicates if something else inserted meanwhile
+              if (!_places.any((p) => p.id == place.id)) {
+                _places.insert(0, place);
+              }
+            }
+          } catch (e) {
+            debugPrint('Error while populating favorite places: $e');
+          }
+        }
+
+        notifyListeners();
+      } else {
+        debugPrint(
+          'Failed to load favorites from Supabase: ${resp.statusCode} ${resp.body}',
+        );
+      }
     } catch (e) {
       debugPrint('Failed to load favorites: $e');
     }
   }
 
-  Future<void> _saveFavorites() async {
+  Future<bool> _addFavoriteToSupabase(String userId, String placeId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_prefsFavoritesKey, _favoriteIds.toList());
+      final token = _authProvider!.session?.accessToken;
+      if (token == null) return false;
+
+      final uri = Uri.parse('${SupabaseConfig.supabaseUrl}/rest/v1/wishlists');
+      final resp = await http
+          .post(
+            uri,
+            headers: {
+              'apikey': SupabaseConfig.supabaseAnonKey,
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates',
+            },
+            body: json.encode({'user_id': userId, 'place_id': placeId}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (resp.statusCode == 404) {
+        debugPrint('Supabase wishlists table not found while adding favorite');
+        _favoritesEnabled = false;
+        notifyListeners();
+        return false;
+      }
+
+      return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (e) {
-      debugPrint('Failed to save favorites: $e');
+      debugPrint('Failed to add favorite to Supabase: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _removeFavoriteFromSupabase(
+    String userId,
+    String placeId,
+  ) async {
+    try {
+      final token = _authProvider!.session?.accessToken;
+      if (token == null) return false;
+
+      final uri = Uri.parse(
+        '${SupabaseConfig.supabaseUrl}/rest/v1/wishlists?user_id=eq.$userId&place_id=eq.$placeId',
+      );
+      final resp = await http
+          .delete(
+            uri,
+            headers: {
+              'apikey': SupabaseConfig.supabaseAnonKey,
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (resp.statusCode == 404) {
+        debugPrint(
+          'Supabase wishlists table not found while removing favorite',
+        );
+        _favoritesEnabled = false;
+        notifyListeners();
+        return false;
+      }
+
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (e) {
+      debugPrint('Failed to remove favorite from Supabase: $e');
+      return false;
     }
   }
 

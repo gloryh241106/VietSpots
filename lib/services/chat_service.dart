@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 import 'place_service.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'dart:convert';
 
 /// Chat request model
 class ChatRequest {
@@ -189,6 +192,62 @@ class ChatService {
         'success': false,
         'message': e.toString(),
       }, null);
+    }
+  }
+
+  /// POST /stt/transcribe - Transcribe audio file
+  /// Uses multipart upload; returns a simple map with `transcript` and `confidence`
+  Future<Map<String, dynamic>> transcribeAudioFile(
+    File file, {
+    String language = 'vi-VN',
+  }) async {
+    try {
+      final resp = await _api.uploadFiles('/stt/transcribe', [
+        file,
+      ], fieldName: 'file');
+
+      // API returns an object matching STTResponse in OpenAPI
+      if (resp is Map<String, dynamic>) return resp;
+      return {'transcript': resp.toString()};
+    } catch (e) {
+      debugPrint('STT request failed: $e');
+      rethrow;
+    }
+  }
+
+  /// POST /tts - Synthesize text to speech and return an MP3 file saved to temporary directory.
+  /// Synthesize text to speech. Uses a simple cache in the temp directory
+  /// to avoid re-requesting the same text repeatedly.
+  Future<File> synthesizeTextToSpeech(
+    String text, {
+    String language = 'vi-VN',
+  }) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+
+      // Create a short, filesystem-safe cache key from the text and language.
+      final key = base64Url
+          .encode(utf8.encode('$language|$text'))
+          .replaceAll('=', '');
+      final safeKey = key.length > 64 ? key.substring(0, 64) : key;
+      final file = File('${tempDir.path}/vietspots_tts_$safeKey.mp3');
+
+      // Return cached file if exists
+      if (await file.exists()) {
+        return file;
+      }
+
+      // ApiService.postBinary returns raw bytes
+      final bytes = await _api.postBinary(
+        '/tts',
+        body: {'text': text, 'language': language},
+      );
+
+      await file.writeAsBytes(bytes, flush: true);
+      return file;
+    } catch (e) {
+      debugPrint('TTS synthesis failed: $e');
+      rethrow;
     }
   }
 

@@ -65,7 +65,7 @@ class UserService {
   /// GET /users/{user_id}/comments - Get user's comments
   Future<List<CommentDTO>> getUserComments(
     String userId, {
-    int limit = 20,
+    int limit = 20000,
     int offset = 0,
   }) async {
     final response = await _api.get(
@@ -79,11 +79,11 @@ class UserService {
   /// GET /api/users/{user_id}/commented-places - Get places user has commented on
   Future<UserCommentedPlacesResponse> getUserCommentedPlaces(
     String userId, {
-    int limit = 50,
+    int limit = 20000,
     int offset = 0,
   }) async {
     final response = await _api.get(
-      '/api/users/$userId/commented-places',
+      '/users/$userId/commented-places',
       queryParams: {'limit': limit, 'offset': offset},
     );
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
@@ -27,7 +28,7 @@ class ApiResponse<T> {
     T Function(dynamic)? fromJsonT,
   ) {
     return ApiResponse<T>(
-      success: json['success'] ?? true,
+      success: json['success'] ?? false,
       message: json['message'] ?? '',
       data: fromJsonT != null && json['data'] != null
           ? fromJsonT(json['data'])
@@ -56,6 +57,18 @@ class ApiService {
 
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
+  Uri _buildUri(String endpoint, [Map<String, dynamic>? queryParams]) {
+    String base = ApiConfig.baseUrl;
+    if (base.endsWith('/')) base = base.substring(0, base.length - 1);
+    String ep = endpoint;
+    if (!ep.startsWith('/')) ep = '/$ep';
+    final uri = Uri.parse('$base$ep');
+    if (queryParams == null) return uri;
+    return uri.replace(
+      queryParameters: queryParams.map((k, v) => MapEntry(k, v?.toString())),
+    );
+  }
+
   /// Set user ID for authenticated requests
   void setUserId(String? userId) {
     _userId = userId;
@@ -82,11 +95,7 @@ class ApiService {
     String endpoint, {
     Map<String, dynamic>? queryParams,
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint').replace(
-      queryParameters: queryParams?.map(
-        (key, value) => MapEntry(key, value?.toString()),
-      ),
-    );
+    final uri = _buildUri(endpoint, queryParams);
 
     try {
       final response = await _client
@@ -107,7 +116,7 @@ class ApiService {
     Map<String, dynamic>? body,
     Duration? timeout,
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    final uri = _buildUri(endpoint);
 
     try {
       final response = await _client
@@ -121,7 +130,7 @@ class ApiService {
 
   /// PUT request
   Future<dynamic> put(String endpoint, {Map<String, dynamic>? body}) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    final uri = _buildUri(endpoint);
 
     try {
       final response = await _client
@@ -135,7 +144,7 @@ class ApiService {
 
   /// DELETE request
   Future<dynamic> delete(String endpoint) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    final uri = _buildUri(endpoint);
 
     try {
       final response = await _client
@@ -153,16 +162,15 @@ class ApiService {
     List<File> files, {
     String fieldName = 'files',
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    final uri = _buildUri(endpoint);
     final request = http.MultipartRequest('POST', uri);
 
-    // Add headers - include both X-User-ID and Authorization Bearer token
     request.headers.addAll({
+      'Accept': 'application/json',
       if (_userId != null) 'X-User-ID': _userId!,
       if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
     });
 
-    // Add files
     for (final file in files) {
       request.files.add(
         await http.MultipartFile.fromPath(fieldName, file.path),
@@ -170,7 +178,9 @@ class ApiService {
     }
 
     try {
-      final streamedResponse = await request.send().timeout(ApiConfig.timeout);
+      final streamedResponse = await _client
+          .send(request)
+          .timeout(ApiConfig.timeout);
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response);
     } on SocketException {
@@ -185,11 +195,11 @@ class ApiService {
     List<String> filenames, {
     String fieldName = 'files',
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    final uri = _buildUri(endpoint);
     final request = http.MultipartRequest('POST', uri);
 
-    // Add headers - include both X-User-ID and Authorization Bearer token
     request.headers.addAll({
+      'Accept': 'application/json',
       if (_userId != null) 'X-User-ID': _userId!,
       if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
     });
@@ -216,9 +226,56 @@ class ApiService {
     }
 
     try {
-      final streamedResponse = await request.send().timeout(ApiConfig.timeout);
+      final streamedResponse = await _client
+          .send(request)
+          .timeout(ApiConfig.timeout);
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response);
+    } on SocketException {
+      throw ApiException(statusCode: 0, message: 'No internet connection');
+    }
+  }
+
+  /// POST request that returns raw bytes (useful for binary responses like MP3)
+  Future<Uint8List> postBinary(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    Duration? timeout,
+  }) async {
+    final uri = _buildUri(endpoint);
+
+    try {
+      // Do not set Content-Type to application/json to allow binary responses
+      final response = await _client
+          .post(
+            uri,
+            headers: {
+              if (_userId != null) 'X-User-ID': _userId!,
+              if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+            },
+            body: body != null ? jsonEncode(body) : null,
+          )
+          .timeout(timeout ?? ApiConfig.timeout);
+
+      // If non-2xx, try to decode error as JSON/text for message
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final bodyString = utf8.decode(response.bodyBytes);
+        dynamic parsed;
+        try {
+          parsed = jsonDecode(bodyString);
+        } catch (_) {
+          parsed = bodyString;
+        }
+        throw ApiException(
+          statusCode: response.statusCode,
+          message: parsed is Map
+              ? (parsed['message'] ?? parsed['detail'] ?? parsed.toString())
+              : parsed.toString(),
+          body: parsed,
+        );
+      }
+
+      return response.bodyBytes;
     } on SocketException {
       throw ApiException(statusCode: 0, message: 'No internet connection');
     }
@@ -228,17 +285,29 @@ class ApiService {
   dynamic _handleResponse(http.Response response) {
     // Decode response body as UTF-8 to properly handle Vietnamese characters
     final bodyString = utf8.decode(response.bodyBytes);
-    final body = bodyString.isNotEmpty ? jsonDecode(bodyString) : null;
-
-    // Removed debug-only checks
+    dynamic body;
+    if (bodyString.isNotEmpty) {
+      try {
+        body = jsonDecode(bodyString);
+      } catch (e) {
+        body = bodyString;
+      }
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
     }
 
+    String message = 'Unknown error';
+    if (body is Map<String, dynamic>) {
+      message = body['detail'] ?? body['message'] ?? message;
+    } else if (body is String && body.isNotEmpty) {
+      message = body;
+    }
+
     throw ApiException(
       statusCode: response.statusCode,
-      message: body?['detail'] ?? body?['message'] ?? 'Unknown error',
+      message: message,
       body: body,
     );
   }

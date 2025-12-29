@@ -22,9 +22,7 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1E1E1E)
-            : Colors.redAccent,
+        backgroundColor: Theme.of(context).primaryColor,
         elevation: Theme.of(context).brightness == Brightness.dark ? 0 : 0,
         title: Text(
           locProvider.translate('app_name'),
@@ -58,9 +56,9 @@ class HomeScreen extends StatelessWidget {
                   backgroundColor: Colors.white,
                   backgroundImage: avatarImageProvider(user?.avatarUrl),
                   child: user?.avatarUrl == null
-                      ? const Icon(
+                      ? Icon(
                           Icons.person,
-                          color: Colors.redAccent,
+                          color: Theme.of(context).primaryColor,
                           size: 20,
                         )
                       : null,
@@ -83,18 +81,20 @@ class HomeScreen extends StatelessWidget {
               child: Container(
                 height: 48,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(30),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.search, color: Colors.grey),
+                    Icon(Icons.search, color: Theme.of(context).dividerColor),
                     const SizedBox(width: 8),
                     Text(
                       locProvider.translate('search_hint'),
-                      style: const TextStyle(color: Colors.grey),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).dividerColor,
+                      ),
                     ),
                   ],
                 ),

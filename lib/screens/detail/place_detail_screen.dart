@@ -18,6 +18,7 @@ import 'package:vietspots/services/api_service.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:vietspots/services/image_service.dart';
+import 'package:vietspots/providers/auth_provider.dart';
 
 class PlaceDetailScreen extends StatefulWidget {
   final Place place;
@@ -56,11 +57,13 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
         final provider = Provider.of<PlaceProvider>(context, listen: false);
         final contains = provider.places.any((p) => p.id == widget.place.id);
         if (contains) {
-          provider.setComments(
-            widget.place.id,
-            widget.place.comments,
-            replaceCount: true,
-          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            provider.setComments(
+              widget.place.id,
+              widget.place.comments,
+              replaceCount: true,
+            );
+          });
         } else {
           setState(() {
             _localComments = widget.place.comments;
@@ -87,7 +90,9 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
         final provider = Provider.of<PlaceProvider>(context, listen: false);
         final contains = provider.places.any((p) => p.id == widget.place.id);
         if (contains) {
-          provider.setComments(widget.place.id, comments, replaceCount: true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            provider.setComments(widget.place.id, comments, replaceCount: true);
+          });
         } else {
           // Place not present in provider lists (e.g. came from Chat suggestions).
           // Keep comments locally so this screen can display them.
@@ -127,11 +132,13 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
               (p) => p.id == widget.place.id,
             );
             if (contains) {
-              provider.setComments(
-                widget.place.id,
-                comments2,
-                replaceCount: true,
-              );
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                provider.setComments(
+                  widget.place.id,
+                  comments2,
+                  replaceCount: true,
+                );
+              });
             } else {
               setState(() {
                 _localComments = comments2;
@@ -171,6 +178,9 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
     try {
       final api = Provider.of<ApiService>(context, listen: false);
       final service = CommentService(api);
+      // Capture provider before awaiting network calls to avoid using
+      // `context` after an await.
+      final provider = Provider.of<PlaceProvider>(context, listen: false);
       final dtos = await service.getPlaceComments(
         widget.place.id,
         limit: _commentsLimit,
@@ -178,7 +188,6 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
       );
       final more = dtos.map((d) => d.toPlaceComment()).toList();
       if (more.isNotEmpty) {
-        final provider = Provider.of<PlaceProvider>(context, listen: false);
         // Append to existing displayed comments
         final contains = provider.places.any((p) => p.id == widget.place.id);
         if (contains) {
@@ -188,7 +197,9 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
             orElse: () => widget.place,
           );
           final merged = [...p.comments, ...more];
-          provider.setComments(widget.place.id, merged, replaceCount: true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            provider.setComments(widget.place.id, merged, replaceCount: true);
+          });
         } else {
           setState(() {
             _localComments = [..._localComments, ...more];
@@ -325,15 +336,54 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                         color: isFav ? Colors.redAccent : Colors.white,
                         size: 28,
                       ),
-                      onPressed: () {
-                        placeProvider.toggleFavorite(widget.place.id);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              isFav
-                                  ? loc.translate('removed_from_favorites')
-                                  : loc.translate('added_to_favorites'),
+                      onPressed: () async {
+                        // Capture messenger and messages before any awaits to avoid
+                        // using BuildContext across async gaps.
+                        final messenger = ScaffoldMessenger.of(context);
+                        if (!placeProvider.favoritesEnabled) {
+                          // Server-side favorites are unavailable (missing table).
+                          // Allow a local-only toggle so UI remains responsive,
+                          // but inform the user the change won't be persisted.
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                loc.translate('favorites_unavailable'),
+                              ),
+                              duration: const Duration(seconds: 2),
                             ),
+                          );
+                        }
+
+                        final auth = Provider.of<AuthProvider>(
+                          context,
+                          listen: false,
+                        );
+                        if (!auth.isLoggedIn) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                loc.translate('please_login_to_favorite'),
+                              ),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Capture the label strings before awaiting network calls.
+                        final addedMsg = loc.translate('added_to_favorites');
+                        final removedMsg = loc.translate(
+                          'removed_from_favorites',
+                        );
+
+                        await placeProvider.toggleFavorite(widget.place.id);
+                        final nowFav = placeProvider.isFavorite(
+                          widget.place.id,
+                        );
+                        if (!mounted) return;
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(nowFav ? addedMsg : removedMsg),
                             duration: const Duration(seconds: 1),
                           ),
                         );
@@ -911,6 +961,19 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                           return Column(
                             children: [
                               ...commentsToShow.reversed.map((c) {
+                                // Build star row (5 stars, filled up to c.rating)
+                                final stars = List<Widget>.generate(5, (i) {
+                                  final idx = i + 1;
+                                  final filled = idx <= c.rating;
+                                  return Icon(
+                                    Icons.star,
+                                    color: filled
+                                        ? Colors.amber
+                                        : Colors.grey[300],
+                                    size: 16,
+                                  );
+                                });
+
                                 return Container(
                                   margin: const EdgeInsets.symmetric(
                                     vertical: 8.0,
@@ -933,16 +996,21 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           CircleAvatar(
-                                            radius: 18,
+                                            radius: 20,
                                             child: Text(
                                               c.author.isNotEmpty
                                                   ? c.author[0]
                                                   : '?',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                              ),
                                             ),
                                           ),
-                                          const SizedBox(width: 10),
+                                          const SizedBox(width: 12),
                                           Expanded(
                                             child: Column(
                                               crossAxisAlignment:
@@ -958,78 +1026,63 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                                                       TextOverflow.ellipsis,
                                                 ),
                                                 const SizedBox(height: 6),
-                                                Text(c.text),
-                                                const SizedBox(height: 8),
-                                                if (c.imagePath != null)
-                                                  Builder(
-                                                    builder: (_) {
-                                                      final url = c.imagePath!;
-                                                      if (url.startsWith(
-                                                            'http',
-                                                          ) ||
-                                                          url.startsWith(
-                                                            'data:',
-                                                          )) {
-                                                        return SizedBox(
-                                                          height: 160,
-                                                          child: ClipRRect(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
-                                                            child: CachedNetworkImage(
-                                                              imageUrl: url,
-                                                              fit: BoxFit.cover,
-                                                              width: double
-                                                                  .infinity,
-                                                              placeholder:
-                                                                  (
-                                                                    c,
-                                                                    u,
-                                                                  ) => Container(
-                                                                    color: Colors
-                                                                        .grey[200],
-                                                                  ),
-                                                              errorWidget:
-                                                                  (
-                                                                    c,
-                                                                    u,
-                                                                    e,
-                                                                  ) => Container(
-                                                                    color: Colors
-                                                                        .grey[200],
-                                                                  ),
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }
-                                                      try {
-                                                        final f = File(url);
-                                                        return SizedBox(
-                                                          height: 160,
-                                                          child: ClipRRect(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
-                                                            child: Image.file(
-                                                              f,
-                                                              fit: BoxFit.cover,
-                                                              width: double
-                                                                  .infinity,
-                                                            ),
-                                                          ),
-                                                        );
-                                                      } catch (_) {
-                                                        return const SizedBox.shrink();
-                                                      }
-                                                    },
-                                                  ),
+                                                Row(children: stars),
                                               ],
                                             ),
                                           ),
                                         ],
                                       ),
+                                      const SizedBox(height: 10),
+                                      Text(c.text),
+                                      const SizedBox(height: 8),
+                                      if (c.imagePath != null)
+                                        Builder(
+                                          builder: (_) {
+                                            final url = c.imagePath!;
+                                            if (url.startsWith('http') ||
+                                                url.startsWith('data:')) {
+                                              return SizedBox(
+                                                height: 160,
+                                                child: ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: CachedNetworkImage(
+                                                    imageUrl: url,
+                                                    fit: BoxFit.cover,
+                                                    width: double.infinity,
+                                                    placeholder: (c, u) =>
+                                                        Container(
+                                                          color:
+                                                              Colors.grey[200],
+                                                        ),
+                                                    errorWidget: (c, u, e) =>
+                                                        Container(
+                                                          color:
+                                                              Colors.grey[200],
+                                                        ),
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                            try {
+                                              final f = File(url);
+                                              return SizedBox(
+                                                height: 160,
+                                                child: ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: Image.file(
+                                                    f,
+                                                    fit: BoxFit.cover,
+                                                    width: double.infinity,
+                                                  ),
+                                                ),
+                                              );
+                                            } catch (_) {
+                                              return const SizedBox.shrink();
+                                            }
+                                          },
+                                        ),
                                     ],
                                   ),
                                 );
@@ -1737,8 +1790,8 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
   final ImagePicker _picker = ImagePicker();
 
   int _rating = 5;
-  XFile? _image;
-  Uint8List? _imageBytes;
+  final List<XFile> _images = [];
+  final List<Uint8List> _imageBytes = [];
   bool _showError = false;
 
   @override
@@ -1748,18 +1801,97 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
   }
 
   Future<void> _pickImage() async {
-    // Keep a small square preview thumbnail to avoid layout jumps.
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 70,
+    // Offer Camera or Gallery. Keep sheet safe from navigation bar.
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: Text(
+                  Provider.of<LocalizationProvider>(
+                    context,
+                    listen: false,
+                  ).translate('gallery'),
+                ),
+                onTap: () => Navigator.pop(ctx, 'gallery'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: Text(
+                  Provider.of<LocalizationProvider>(
+                    context,
+                    listen: false,
+                  ).translate('camera'),
+                ),
+                onTap: () => Navigator.pop(ctx, 'camera'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: Text(
+                  Provider.of<LocalizationProvider>(
+                    context,
+                    listen: false,
+                  ).translate('cancel'),
+                ),
+                onTap: () => Navigator.pop(ctx, null),
+              ),
+            ],
+          ),
+        );
+      },
     );
-    if (!mounted || picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
-    setState(() {
-      _image = picked;
-      _imageBytes = bytes;
-    });
+
+    if (!mounted || choice == null) return;
+
+    try {
+      if (choice == 'camera') {
+        final picked = await _picker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 75,
+        );
+        if (picked == null) return;
+        final bytes = await picked.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _images.add(picked);
+          _imageBytes.add(bytes);
+        });
+      } else {
+        // Gallery: allow multi-select on supported platforms
+        try {
+          final pickedList = await _picker.pickMultiImage(imageQuality: 75);
+          if (pickedList.isNotEmpty) {
+            for (final p in pickedList) {
+              final bytes = await p.readAsBytes();
+              if (!mounted) break;
+              _images.add(p);
+              _imageBytes.add(bytes);
+            }
+            if (mounted) setState(() {});
+          }
+        } catch (_) {
+          // Fallback single pick if multi not supported
+          final picked = await _picker.pickImage(
+            source: ImageSource.gallery,
+            imageQuality: 75,
+          );
+          if (picked == null) return;
+          final bytes = await picked.readAsBytes();
+          if (!mounted) return;
+          setState(() {
+            _images.add(picked);
+            _imageBytes.add(bytes);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Image pick failed: $e');
+    }
   }
 
   void _submit() {
@@ -1774,9 +1906,11 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
       author: 'You',
       rating: _rating,
       text: _controller.text.trim(),
-      imagePath: kIsWeb && _imageBytes != null
-          ? 'data:image/${(_image?.name.split('.').last ?? 'jpg')};base64,${base64Encode(_imageBytes!)}'
-          : _image?.path,
+      // For local preview store first attached image (data URI on web),
+      // backend upload happens asynchronously in `_saveCommentToBackend`.
+      imagePath: kIsWeb && _imageBytes.isNotEmpty
+          ? 'data:image/${_images.first.name.split('.').last};base64,${base64Encode(_imageBytes.first)}'
+          : (_images.isNotEmpty ? _images.first.path : null),
       timestamp: DateTime.now(),
     );
 
@@ -1800,30 +1934,44 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
   }
 
   Future<void> _saveCommentToBackend(PlaceComment comment) async {
+    final rootMessenger = ScaffoldMessenger.of(widget.rootContext);
     try {
-      final api = Provider.of<ApiService>(widget.rootContext, listen: false);
-      final service = CommentService(api);
+      // Capture root-level services and messenger before any awaits so we
+      // don't reference `widget.rootContext` across async gaps.
+      final rootApi = Provider.of<ApiService>(
+        widget.rootContext,
+        listen: false,
+      );
+      final service = CommentService(rootApi);
       final imageService = Provider.of<ImageService>(
         widget.rootContext,
         listen: false,
       );
+      final rootProvider = Provider.of<PlaceProvider>(
+        widget.rootContext,
+        listen: false,
+      );
+      // rootMessenger already captured above
 
-      // Prepare image URLs if there's an image
+      // Prepare image URLs if there are images
       List<String> imageUrls = [];
-      if (_imageBytes != null) {
+      if (_imageBytes.isNotEmpty) {
         try {
           if (kIsWeb) {
-            // On web upload from bytes
-            final filename = _image?.name ?? 'upload.jpg';
+            // On web upload from bytes (support multiple)
+            final filenames = List.generate(
+              _imageBytes.length,
+              (i) => _images.length > i ? _images[i].name : 'upload_$i.jpg',
+            );
             final uploadResponse = await imageService.uploadImagesFromBytes(
-              [_imageBytes!],
-              [filename],
+              _imageBytes,
+              filenames,
             );
             if (uploadResponse.success) imageUrls.addAll(uploadResponse.urls);
           } else {
-            // Mobile: upload from File path
-            final file = File(_image!.path);
-            final uploadResponse = await imageService.uploadImages([file]);
+            // Mobile: upload from File paths (support multiple)
+            final files = _images.map((x) => File(x.path)).toList();
+            final uploadResponse = await imageService.uploadImages(files);
             if (uploadResponse.success) imageUrls.addAll(uploadResponse.urls);
           }
         } catch (e) {
@@ -1840,38 +1988,35 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
       );
 
       if (!response.success) {
-        // Show user-friendly message and suggest retry.
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        // Use the root messenger (from page context) to display results.
+        rootMessenger.showSnackBar(
           SnackBar(
             content: Text('Không thể lưu bình luận: ${response.message}'),
           ),
         );
       } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Bình luận đã được lưu')));
+        rootMessenger.showSnackBar(
+          const SnackBar(content: Text('Bình luận đã được lưu')),
+        );
         // Refresh first page of comments from server to get server-side timestamp/images
         try {
-          final api2 = Provider.of<ApiService>(
-            widget.rootContext,
-            listen: false,
-          );
-          final service2 = CommentService(api2);
-          final dtos = await service2.getPlaceComments(
+          final dtos = await service.getPlaceComments(
             widget.placeId,
             limit: 10,
             offset: 0,
           );
           final comments = dtos.map((d) => d.toPlaceComment()).toList();
-          final provider = Provider.of<PlaceProvider>(
-            widget.rootContext,
-            listen: false,
+          final contains = rootProvider.places.any(
+            (p) => p.id == widget.placeId,
           );
-          final contains = provider.places.any((p) => p.id == widget.placeId);
           if (contains) {
-            provider.setComments(widget.placeId, comments, replaceCount: true);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              rootProvider.setComments(
+                widget.placeId,
+                comments,
+                replaceCount: true,
+              );
+            });
           }
         } catch (e) {
           debugPrint('Failed to refresh comments after create: $e');
@@ -1879,10 +2024,9 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
       }
     } catch (e) {
       debugPrint('Error saving comment to backend: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Lỗi khi lưu bình luận: $e')));
+      rootMessenger.showSnackBar(
+        SnackBar(content: Text('Lỗi khi lưu bình luận: $e')),
+      );
     }
   }
 
@@ -1962,7 +2106,7 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
                           child: Text(loc.translate('attach_image')),
                         ),
                       ),
-                      if (_imageBytes != null) ...[
+                      if (_imageBytes.isNotEmpty) ...[
                         const SizedBox(height: 12),
 
                         // Location map preview (labelled 'Location')
@@ -1983,20 +2127,63 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
                         ),
                         const SizedBox(height: 8),
 
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.memory(
-                            _imageBytes!,
-                            width: 72,
-                            height: 72,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  width: 72,
-                                  height: 72,
-                                  color: Colors.grey[200],
-                                  child: const Icon(Icons.broken_image),
-                                ),
+                        SizedBox(
+                          height: 96,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _imageBytes.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (context, idx) {
+                              final bytes = _imageBytes[idx];
+                              return Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.memory(
+                                      bytes,
+                                      width: 96,
+                                      height: 96,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
+                                                width: 96,
+                                                height: 96,
+                                                color: Colors.grey[200],
+                                                child: const Icon(
+                                                  Icons.broken_image,
+                                                ),
+                                              ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _images.removeAt(idx);
+                                          _imageBytes.removeAt(idx);
+                                        });
+                                      },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        padding: const EdgeInsets.all(4),
+                                        child: const Icon(
+                                          Icons.close,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ],

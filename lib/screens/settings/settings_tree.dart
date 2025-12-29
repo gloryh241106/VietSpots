@@ -152,157 +152,215 @@ class _GeneralInfoScreenState extends State<GeneralInfoScreen> {
           padding: const EdgeInsets.all(16.0),
           children: [
             Center(
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundImage: avatarImageProvider(user?.avatarUrl),
-                    child: user?.avatarUrl == null
-                        ? const Icon(Icons.person, size: 50)
-                        : null,
-                  ),
-                  TextButton(
-                    onPressed: _changeAvatar,
-                    child: Text(loc.translate('change_avatar')),
-                  ),
-                ],
+              child: SizedBox(
+                width: 140,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 56,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceVariant,
+                      backgroundImage: avatarImageProvider(user?.avatarUrl),
+                      child: user?.avatarUrl == null
+                          ? Icon(
+                              Icons.person,
+                              size: 52,
+                              color: Colors.grey[700],
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Material(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: const CircleBorder(),
+                        elevation: 2,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _changeAvatar,
+                          child: const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 12),
             Form(
               key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: loc.translate('full_name'),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return loc.translate('full_name_required');
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                      labelText: loc.translate('email'),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return loc.translate('email_required');
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _phoneController,
-                    decoration: InputDecoration(
-                      labelText: loc.translate('phone_number'),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return loc.translate('phone_required');
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _introductionController,
-                    decoration: InputDecoration(
-                      labelText: loc.translate('introduction'),
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
+              child: Card(
+                elevation: 1,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${loc.translate('age')}: '),
-                      Expanded(
-                        child: Slider(
-                          value: _age.toDouble(),
-                          min: 13,
-                          max: 100,
-                          divisions: 87,
-                          label: '$_age',
-                          onChanged: (v) => setState(() => _age = v.round()),
+                      Text(
+                        loc.translate('personal_details'),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: loc.translate('full_name'),
+                          prefixIcon: const Icon(Icons.person),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return loc.translate('full_name_required');
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _emailController,
+                        decoration: InputDecoration(
+                          labelText: loc.translate('email'),
+                          prefixIcon: const Icon(Icons.email),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return loc.translate('email_required');
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _phoneController,
+                        decoration: InputDecoration(
+                          labelText: loc.translate('phone_number'),
+                          prefixIcon: const Icon(Icons.phone),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return loc.translate('phone_required');
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _introductionController,
+                        decoration: InputDecoration(
+                          labelText: loc.translate('introduction'),
+                          prefixIcon: const Icon(Icons.edit),
+                        ),
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 12),
+                      // Age on its own row for clearer layout
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${loc.translate('age')}: $_age'),
+                          Slider(
+                            value: _age.toDouble(),
+                            min: 13,
+                            max: 100,
+                            divisions: 87,
+                            label: '$_age',
+                            onChanged: (v) => setState(() => _age = v.round()),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(loc.translate('gender')),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ChoiceChip(
+                                label: Text(loc.translate('male')),
+                                selected: _gender == 'Male',
+                                onSelected: (s) =>
+                                    setState(() => _gender = 'Male'),
+                              ),
+                              const SizedBox(width: 6),
+                              ChoiceChip(
+                                label: Text(loc.translate('female')),
+                                selected: _gender == 'Female',
+                                onSelected: (s) =>
+                                    setState(() => _gender = 'Female'),
+                              ),
+                              const SizedBox(width: 6),
+                              ChoiceChip(
+                                label: Text(loc.translate('other')),
+                                selected: _gender == 'Other',
+                                onSelected: (s) =>
+                                    setState(() => _gender = 'Other'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.save),
+                          label: Text(loc.translate('save_changes')),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          onPressed: () async {
+                            if (!_formKey.currentState!.validate()) return;
+
+                            final locLocal = loc; // capture before async gap
+                            final auth = Provider.of<AuthProvider>(
+                              context,
+                              listen: false,
+                            );
+
+                            final success = await auth.updateProfile(
+                              name: _nameController.text.trim(),
+                              email: _emailController.text.trim(),
+                              phone: _phoneController.text.trim(),
+                              introduction: _introductionController.text.trim(),
+                              age: _age,
+                              gender: _gender,
+                            );
+
+                            if (!mounted) return;
+
+                            final messenger = ScaffoldMessenger.of(context);
+                            if (success) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '${locLocal.translate('save_changes')} ✓',
+                                  ),
+                                ),
+                              );
+                              if (mounted) Navigator.pop(context);
+                            } else {
+                              final err =
+                                  auth.errorMessage ?? 'Lỗi lưu thay đổi';
+                              messenger.showSnackBar(
+                                SnackBar(content: Text(err)),
+                              );
+                            }
+                          },
                         ),
                       ),
-                      SizedBox(width: 40, child: Text('$_age')),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Text('${loc.translate('gender')}: '),
-                      const SizedBox(width: 12),
-                      ChoiceChip(
-                        label: Text(loc.translate('male')),
-                        selected: _gender == 'Male',
-                        onSelected: (s) => setState(() => _gender = 'Male'),
-                      ),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: Text(loc.translate('female')),
-                        selected: _gender == 'Female',
-                        onSelected: (s) => setState(() => _gender = 'Female'),
-                      ),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: Text(loc.translate('other')),
-                        selected: _gender == 'Other',
-                        onSelected: (s) => setState(() => _gender = 'Other'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        if (!_formKey.currentState!.validate()) return;
-
-                        final locLocal = loc; // capture before async gap
-                        final auth = Provider.of<AuthProvider>(
-                          context,
-                          listen: false,
-                        );
-
-                        final success = await auth.updateProfile(
-                          name: _nameController.text.trim(),
-                          email: _emailController.text.trim(),
-                          phone: _phoneController.text.trim(),
-                          introduction: _introductionController.text.trim(),
-                          age: _age,
-                          gender: _gender,
-                        );
-
-                        if (!mounted) return;
-
-                        final messenger = ScaffoldMessenger.of(context);
-                        if (success) {
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '${locLocal.translate('save_changes')} ✓',
-                              ),
-                            ),
-                          );
-                          if (mounted) Navigator.pop(context);
-                        } else {
-                          final err = auth.errorMessage ?? 'Lỗi lưu thay đổi';
-                          messenger.showSnackBar(SnackBar(content: Text(err)));
-                        }
-                      },
-                      child: Text(loc.translate('save_changes')),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
@@ -320,56 +378,62 @@ class PrivateInfoScreen extends StatelessWidget {
     final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
       appBar: AppBar(title: Text(loc.translate('private_information'))),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          ListTile(
-            title: Text(loc.translate('preferences')),
-            subtitle: Text(loc.translate('preferences_subtitle')),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(8),
+        separatorBuilder: (context, index) => const Divider(height: 1),
+        itemCount: 4,
+        itemBuilder: (context, index) {
+          final items = [
+            {
+              'icon': Icons.tune,
+              'title': loc.translate('preferences'),
+              'subtitle': loc.translate('preferences_subtitle'),
+              'route': PreferencesScreenSettings(),
+            },
+            {
+              'icon': Icons.public,
+              'title': loc.translate('culture'),
+              'subtitle': loc.translate('culture_subtitle'),
+              'route': CultureScreenSettings(),
+            },
+            {
+              'icon': Icons.account_balance,
+              'title': loc.translate('religion'),
+              'subtitle': loc.translate('religion_subtitle'),
+              'route': ReligionScreenSettings(),
+            },
+            {
+              'icon': Icons.group,
+              'title': loc.translate('companion_preference'),
+              'subtitle': loc.translate('travel_companion'),
+              'route': CompanionPreferenceScreenSettings(),
+            },
+          ];
+
+          final item = items[index];
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            leading: CircleAvatar(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.12),
+              child: Icon(
+                item['icon'] as IconData,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            title: Text(item['title'] as String),
+            subtitle: Text(item['subtitle'] as String),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (context) => const PreferencesScreenSettings(),
-              ),
+              MaterialPageRoute(builder: (context) => item['route'] as Widget),
             ),
-          ),
-          ListTile(
-            // NOTE: Use consistent i18n keys (lowercase) so the string updates
-            // when the user switches language.
-            title: Text(loc.translate('culture')),
-            subtitle: Text(loc.translate('culture_subtitle')),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CultureScreenSettings(),
-              ),
-            ),
-          ),
-          ListTile(
-            title: Text(loc.translate('religion')),
-            subtitle: Text(loc.translate('religion_subtitle')),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ReligionScreenSettings(),
-              ),
-            ),
-          ),
-          ListTile(
-            title: Text(loc.translate('companion_preference')),
-            subtitle: Text(loc.translate('travel_companion')),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CompanionPreferenceScreenSettings(),
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

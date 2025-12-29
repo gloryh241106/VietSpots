@@ -1,7 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.dart';
 import 'package:vietspots/models/chat_model.dart';
+import 'package:vietspots/models/place_model.dart';
 import 'package:vietspots/services/chat_service.dart';
 import 'package:vietspots/services/place_service.dart';
 import 'package:geolocator/geolocator.dart';
@@ -33,6 +38,24 @@ class ChatProvider with ChangeNotifier {
   // (no shared_preferences/hive/etc), so we keep history in memory.
   final List<ChatConversation> _history = [];
   String? _activeConversationId;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  // Streaming display state for bot messages (partial reveal like ChatGPT)
+  final Map<String, String> _streamingText = {};
+  static final MethodChannel _recorderChannel = MethodChannel(
+    'vietspots/recorder',
+  );
+
+  // Recording state exposed for UI
+  bool _isRecording = false;
+  DateTime? _recordingStart;
+
+  bool get isRecording => _isRecording;
+
+  /// Duration in seconds since recording started (0 if not recording)
+  int get recordingDuration {
+    if (!_isRecording || _recordingStart == null) return 0;
+    return DateTime.now().difference(_recordingStart!).inSeconds;
+  }
 
   // Storage key for chat history
   static const String _chatHistoryKey = 'chat_history';
@@ -40,6 +63,97 @@ class ChatProvider with ChangeNotifier {
   ChatProvider(this._chatService, this._placeService, [dynamic outboundQueue]) {
     _getUserLocation();
     _loadChatHistoryFromLocal();
+  }
+
+  /// Start push-to-talk recording. Returns true if recording started.
+  Future<bool> startRecording() async {
+    try {
+      final status = await Permission.microphone.request();
+      if (!status.isGranted) return false;
+      _isRecording = true;
+      _recordingStart = DateTime.now();
+      notifyListeners();
+      // Prefer platform SpeechRecognizer (startListening). If not supported, fall back to file-based recorder start.
+      try {
+        final started = await _recorderChannel.invokeMethod<bool>(
+          'startListening',
+        );
+        if (started == true) return true;
+      } catch (_) {}
+      final path = await _recorderChannel.invokeMethod<String>('start');
+      return path != null && path.isNotEmpty;
+    } catch (e) {
+      debugPrint('Start recording failed: $e');
+      _isRecording = false;
+      _recordingStart = null;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Stop recording and transcribe. Returns the transcript (if any).
+  Future<String?> stopRecordingAndTranscribe() async {
+    try {
+      // stop recording UI state first
+      _isRecording = false;
+      final startedAt = _recordingStart;
+      _recordingStart = null;
+      notifyListeners();
+      // First try platform SpeechRecognizer stop (on-device live STT)
+      try {
+        final transcript = await _recorderChannel.invokeMethod<String>(
+          'stopListening',
+        );
+        if (transcript != null && transcript.isNotEmpty) return transcript;
+      } catch (e) {
+        // ignore and fall back to file upload
+      }
+
+      String? path;
+      // Try platform stop which may return a transcript or a file path
+      try {
+        path = await _recorderChannel.invokeMethod<String>('stop');
+      } catch (_) {
+        path = null;
+      }
+
+      if (path == null || path.isEmpty) return null;
+      final file = File(path);
+
+      // Upload to backend STT endpoint
+      try {
+        final resp = await _chatService.transcribeAudioFile(file);
+        final transcript = resp['transcript']?.toString() ?? '';
+        if (transcript.isNotEmpty) {
+          // Log duration if available
+          if (startedAt != null) {
+            final dur = DateTime.now().difference(startedAt).inSeconds;
+            debugPrint('STT transcript received (recording ${dur}s)');
+          }
+          return transcript;
+        }
+      } catch (e) {
+        debugPrint('Transcription failed: $e');
+      }
+    } catch (e) {
+      debugPrint('Stop recording failed: $e');
+    }
+    return null;
+  }
+
+  /// Play TTS for given text (non-blocking). Errors are logged.
+  Future<void> playTts(String text, {String language = 'vi-VN'}) async {
+    try {
+      final file = await _chatService.synthesizeTextToSpeech(
+        text,
+        language: language,
+      );
+      // Use DeviceFileSource on newer audioplayers versions
+      await _audioPlayer.stop();
+      await _audioPlayer.play(DeviceFileSource(file.path));
+    } catch (e) {
+      debugPrint('Play TTS failed: $e');
+    }
   }
 
   /// Load chat history from local storage
@@ -57,6 +171,54 @@ class ChatProvider with ChangeNotifier {
         for (final convData in historyList) {
           final messages =
               (convData['messages'] as List<dynamic>?)?.map((msg) {
+                // Rehydrate relatedPlaces if present
+                List<Place>? relatedPlaces;
+                if (msg is Map<String, dynamic> &&
+                    msg['relatedPlaces'] is List) {
+                  relatedPlaces = (msg['relatedPlaces'] as List<dynamic>)
+                      .map<Place?>((p) {
+                        if (p is Map<String, dynamic>) {
+                          return Place(
+                            id: p['id']?.toString() ?? '',
+                            nameLocalized: (p['nameLocalized'] is Map)
+                                ? Map<String, String>.from(p['nameLocalized'])
+                                : null,
+                            imageUrl: p['imageUrl']?.toString() ?? '',
+                            rating: (p['rating'] is num)
+                                ? (p['rating'] as num).toDouble()
+                                : 0.0,
+                            location: p['location']?.toString() ?? '',
+                            commentCount: (p['commentCount'] is int)
+                                ? p['commentCount'] as int
+                                : (p['commentCount'] is num)
+                                ? (p['commentCount'] as num).toInt()
+                                : 0,
+                            ratingCount: (p['ratingCount'] is int)
+                                ? p['ratingCount'] as int
+                                : (p['ratingCount'] is num)
+                                ? (p['ratingCount'] as num).toInt()
+                                : 0,
+                            latitude: (p['latitude'] is num)
+                                ? (p['latitude'] as num).toDouble()
+                                : 0.0,
+                            longitude: (p['longitude'] is num)
+                                ? (p['longitude'] as num).toDouble()
+                                : 0.0,
+                            descriptionLocalized:
+                                (p['descriptionLocalized'] is Map)
+                                ? Map<String, String>.from(
+                                    p['descriptionLocalized'],
+                                  )
+                                : null,
+                            comments: <PlaceComment>[],
+                          );
+                        }
+                        return null;
+                      })
+                      .whereType<Place>()
+                      .toList();
+                }
+
                 return ChatMessage(
                   id: msg['id']?.toString() ?? DateTime.now().toString(),
                   text: msg['text']?.toString() ?? '',
@@ -65,6 +227,7 @@ class ChatProvider with ChangeNotifier {
                       ? DateTime.tryParse(msg['timestamp'].toString()) ??
                             DateTime.now()
                       : DateTime.now(),
+                  relatedPlaces: relatedPlaces,
                 );
               }).toList() ??
               [];
@@ -119,6 +282,22 @@ class ChatProvider with ChangeNotifier {
                       'text': msg.text,
                       'isUser': msg.isUser,
                       'timestamp': msg.timestamp.toIso8601String(),
+                      'relatedPlaces': msg.relatedPlaces
+                          ?.map(
+                            (p) => {
+                              'id': p.id,
+                              'nameLocalized': p.nameLocalized,
+                              'imageUrl': p.imageUrl,
+                              'rating': p.rating,
+                              'location': p.location,
+                              'commentCount': p.commentCount,
+                              'ratingCount': p.ratingCount,
+                              'latitude': p.latitude,
+                              'longitude': p.longitude,
+                              'descriptionLocalized': p.descriptionLocalized,
+                            },
+                          )
+                          .toList(),
                     },
                   )
                   .toList(),
@@ -148,6 +327,9 @@ class ChatProvider with ChangeNotifier {
   }
 
   List<ChatMessage> get messages => _messages;
+
+  /// Get current streaming text for a message id (returns null if not streaming)
+  String? streamingTextFor(String messageId) => _streamingText[messageId];
   List<ChatConversation> get history => List.unmodifiable(_history);
   String? get activeConversationId => _activeConversationId;
 
@@ -358,6 +540,13 @@ class ChatProvider with ChangeNotifier {
 
       _messages.add(botMsg);
 
+      // Start progressive reveal for bot message (word-by-word)
+      _startStreamingReveal(botMsg.id, botMsg.text);
+
+      // Play TTS for bot reply in background (do not block UI)
+      try {
+        playTts(botMsg.text);
+      } catch (_) {}
       // Save bot response to local storage and Supabase (fire and forget)
       _saveChatMessage(botMsg, _activeConversationId ?? 'default-session');
       try {
@@ -441,5 +630,26 @@ class ChatProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Reveal `text` for message `messageId` gradually (word-by-word).
+  void _startStreamingReveal(String messageId, String text) async {
+    final words = text.split(RegExp(r'\s+'));
+    _streamingText[messageId] = '';
+    notifyListeners();
+
+    final buffer = StringBuffer();
+    for (var i = 0; i < words.length; i++) {
+      if (i > 0) buffer.write(' ');
+      buffer.write(words[i]);
+      _streamingText[messageId] = buffer.toString();
+      notifyListeners();
+      // Small delay to simulate streaming; tune as needed.
+      await Future.delayed(const Duration(milliseconds: 140));
+    }
+
+    // Done streaming — remove streaming entry
+    _streamingText.remove(messageId);
+    notifyListeners();
   }
 }

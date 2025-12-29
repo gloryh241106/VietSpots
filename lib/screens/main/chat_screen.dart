@@ -1,3 +1,4 @@
+// ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart';
@@ -19,6 +20,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+
   int _lastRenderedItemCount = 0;
 
   void _sendMessage() {
@@ -43,6 +45,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
   }
 
   void _startNewChat() {
@@ -81,9 +88,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1E1E1E)
-            : Colors.redAccent,
+        backgroundColor: Theme.of(context).primaryColor,
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -169,13 +174,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ),
                                       ListTile(
                                         title: Text(loc.translate('share')),
-                                        onTap: () =>
-                                            Navigator.pop(ctx, 'share'),
+                                        onTap: () => Navigator.pop(ctx, 'share'),
                                       ),
                                       ListTile(
                                         title: Text(loc.translate('delete')),
-                                        onTap: () =>
-                                            Navigator.pop(ctx, 'delete'),
+                                        onTap: () => Navigator.pop(ctx, 'delete'),
                                       ),
                                       ListTile(
                                         title: Text(loc.translate('cancel')),
@@ -188,7 +191,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             );
 
                             if (!context.mounted) return;
-
                             if (choice == 'open') {
                               Navigator.pop(context);
                               Provider.of<ChatProvider>(
@@ -252,15 +254,15 @@ class _ChatScreenState extends State<ChatScreen> {
                             width: 80,
                             height: 80,
                             decoration: BoxDecoration(
-                              color: Colors.redAccent.withValues(
-                                alpha: 25 / 255,
-                              ),
+                              color: Theme.of(
+                                context,
+                              ).primaryColor.withValues(alpha: 0.08),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.smart_toy,
                               size: 40,
-                              color: Colors.redAccent,
+                              color: Theme.of(context).primaryColor,
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -319,14 +321,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey[850]?.withValues(alpha: 128 / 255)
-                            : Colors.grey[200],
+                        color:
+                            Theme.of(context).inputDecorationTheme.fillColor ??
+                            (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.grey[850]
+                                : Colors.grey[200]),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.grey[800]!.withValues(alpha: 102 / 255)
-                              : Colors.grey[300]!,
+                          color: Theme.of(context).dividerColor,
                           width: 1,
                         ),
                         boxShadow: [
@@ -344,10 +346,15 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         decoration: InputDecoration(
                           hintText: loc.translate('chat_hint'),
-                          hintStyle: TextStyle(
-                            color: Theme.of(context).textTheme.bodyLarge?.color
-                                ?.withValues(alpha: 128 / 255),
-                          ),
+                          hintStyle:
+                              Theme.of(
+                                context,
+                              ).inputDecorationTheme.hintStyle ??
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyLarge?.color?.withValues(alpha: 0.6),
+                              ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 20,
@@ -364,18 +371,120 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  // Voice / STT button
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[800]
+                          : Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.mic,
+                        color: Theme.of(context).iconTheme.color,
+                      ),
+                      onPressed: () async {
+                        final provider = Provider.of<ChatProvider>(
+                          context,
+                          listen: false,
+                        );
+                        final started = await provider.startRecording();
+                        if (!started) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(loc.translate('record_failed')),
+                            ),
+                          );
+                          return;
+                        }
+
+                        final transcript = await showModalBottomSheet<String>(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (ctx) {
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Theme.of(ctx).cardColor,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(12),
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    loc.translate('stt_recording'),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(loc.translate('recording_in_progress')),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    icon: const Icon(Icons.stop),
+                                    label: Text(loc.translate('stop')),
+                                    onPressed: () async {
+                                      final text = await provider
+                                          .stopRecordingAndTranscribe();
+                                      Navigator.of(ctx).pop(text);
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      shape: const StadiumBorder(),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+
+                        if (transcript != null &&
+                            transcript.trim().isNotEmpty) {
+                          _controller.text =
+                              (_controller.text.isEmpty
+                                  ? ''
+                                  : '${_controller.text} ') +
+                              transcript.trim();
+                        }
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(width: 6),
                   Container(
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Colors.redAccent, Colors.pinkAccent],
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).primaryColor,
+                          Theme.of(context).primaryColor.withValues(alpha: 0.9),
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.redAccent.withValues(alpha: 77 / 255),
+                          color: Theme.of(
+                              context,
+                            ).primaryColor.withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -429,7 +538,10 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Text(
                   loc.translate('typing'),
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 const SizedBox(width: 24, height: 14, child: _BouncingDots()),
@@ -452,9 +564,15 @@ class _ChatScreenState extends State<ChatScreen> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
-            const CircleAvatar(
-              backgroundColor: Color(0xFFE8F5E8),
-              child: Icon(Icons.smart_toy, color: Colors.green, size: 20),
+            CircleAvatar(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.secondary.withValues(alpha: 0.12),
+              child: Icon(
+                Icons.smart_toy,
+                color: Theme.of(context).colorScheme.secondary,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 8),
           ],
@@ -462,7 +580,9 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isUser ? Colors.redAccent : const Color(0xFFF5F5F5),
+                color: isUser
+                    ? Theme.of(context).primaryColor
+                    : Theme.of(context).cardColor,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(18),
                   topRight: const Radius.circular(18),
@@ -485,38 +605,59 @@ class _ChatScreenState extends State<ChatScreen> {
                     data: msg.text,
                     styleSheet: MarkdownStyleSheet(
                       p: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                  Colors.black87),
                         fontSize: 15,
                         height: 1.5,
                       ),
                       h1: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                  Colors.black87),
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         height: 1.4,
                       ),
                       h2: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                  Colors.black87),
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         height: 1.4,
                       ),
                       h3: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                  Colors.black87),
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         height: 1.4,
                       ),
                       strong: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                  Colors.black87),
                         fontWeight: FontWeight.bold,
                       ),
                       em: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                  Colors.black87),
                         fontStyle: FontStyle.italic,
                       ),
                       listBullet: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                  Colors.black87),
                         fontSize: 15,
                         height: 1.5,
                       ),
@@ -532,7 +673,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     _formatTimestamp(msg.timestamp),
                     style: TextStyle(
                       color: isUser
-                          ? Colors.white.withValues(alpha: 0.7)
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.onPrimary.withValues(alpha: 0.7)
                           : Colors.grey[600],
                       fontSize: 11,
                     ),
@@ -549,9 +692,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           if (isUser) ...[
             const SizedBox(width: 8),
-            const CircleAvatar(
-              backgroundColor: Colors.redAccent,
-              child: Icon(Icons.person, color: Colors.white, size: 20),
+            CircleAvatar(
+              backgroundColor: Theme.of(context).primaryColor,
+              child: const Icon(Icons.person, color: Colors.white, size: 20),
             ),
           ],
         ],
