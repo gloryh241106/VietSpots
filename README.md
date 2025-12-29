@@ -293,12 +293,3 @@ Tiêu chí (gợi ý chấm theo CT + engineering):
 Trạng thái hiện tại (theo kiểm tra trong workspace):
 - `flutter analyze`: **No issues found**
 - `flutter test`: **All tests passed**
-
----
-
-## 11) Ghi chú phạm vi “xóa các thứ không cần thiết”
-
-Trong phạm vi an toàn của frontend, README này đã được rút gọn/đổi sang dạng báo cáo CT đúng yêu cầu.
-
-Nếu bạn muốn **xóa file/tài liệu phụ** (ví dụ các file ghi chú như `FIXES_IMPLEMENTED.md`, `DETAILED_CHANGES.md`, …), mình cần bạn xác nhận rõ:
-- Xóa file nào (liệt kê), hay chỉ “dọn README”?
