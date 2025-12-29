@@ -11,7 +11,8 @@ class AppTheme {
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     primaryColor: primaryRed,
-    scaffoldBackgroundColor: backgroundLight,
+    // Slightly warmer background to harmonize with red/yellow brand
+    scaffoldBackgroundColor: const Color(0xFFFFF7F6),
     cardColor: Colors.white,
     colorScheme: const ColorScheme.light(
       primary: primaryRed,
@@ -41,11 +42,15 @@ class AppTheme {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      // Warm, soft fill for inputs
+      fillColor: const Color(0xFFFFFAF6),
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(28),
-        borderSide: BorderSide(color: primaryRed.withValues(alpha: 0.9), width: 1),
+        borderSide: BorderSide(
+          color: primaryRed.withValues(alpha: 230),
+          width: 1,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(28),
@@ -65,12 +70,13 @@ class AppTheme {
       backgroundColor: primaryRed,
       elevation: 6,
     ),
-    iconTheme: const IconThemeData(color: primaryRed),
+    // Use accent yellow for gentle icon highlights, keep primary for accents
+    iconTheme: const IconThemeData(color: accentYellow),
     dividerTheme: DividerThemeData(color: Colors.grey[300], thickness: 1),
     chipTheme: ChipThemeData(
       backgroundColor: Colors.grey[100]!,
-      selectedColor: primaryRed.withValues(alpha: 0.12),
-      secondarySelectedColor: primaryRed.withValues(alpha: 0.12),
+      selectedColor: accentYellow.withValues(alpha: 30),
+      secondarySelectedColor: accentYellow.withValues(alpha: 30),
       labelStyle: GoogleFonts.inter(fontSize: 13, color: Colors.black87),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -118,7 +124,10 @@ class AppTheme {
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(28),
-        borderSide: BorderSide(color: primaryRed.withValues(alpha: 0.8), width: 1),
+        borderSide: BorderSide(
+          color: primaryRed.withValues(alpha: 0.8),
+          width: 1,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(28),

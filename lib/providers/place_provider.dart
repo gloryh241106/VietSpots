@@ -325,6 +325,8 @@ class PlaceProvider extends ChangeNotifier {
       final token = _authProvider!.session?.accessToken;
       if (token == null) {
         debugPrint('No access token available for loading favorites');
+        _favoriteIds.clear();
+        notifyListeners();
         return;
       }
 
@@ -345,6 +347,14 @@ class PlaceProvider extends ChangeNotifier {
       if (resp.statusCode == 404) {
         debugPrint('Supabase wishlists table not found - disabling favorites');
         _favoritesEnabled = false;
+        _favoriteIds.clear();
+        notifyListeners();
+        return;
+      }
+      if (resp.statusCode == 401) {
+        debugPrint(
+          'Unauthorized when loading favorites - clearing local favorites',
+        );
         _favoriteIds.clear();
         notifyListeners();
         return;
@@ -375,16 +385,28 @@ class PlaceProvider extends ChangeNotifier {
         if (missing.isNotEmpty) {
           try {
             // Fetch details concurrently but tolerate individual failures.
-            final futures = missing.map((id) async {
-              try {
-                final dto = await _placeService.getPlace(id);
-                return dto.toPlace();
-              } catch (e) {
-                debugPrint('Failed to fetch favorite place $id: $e');
-                return null;
+            Future<Place?> fetchPlaceWithRetry(
+              String id, {
+              int tries = 2,
+            }) async {
+              for (var attempt = 0; attempt < tries; attempt++) {
+                try {
+                  final dto = await _placeService.getPlace(id);
+                  return dto.toPlace();
+                } catch (e) {
+                  debugPrint(
+                    'Attempt ${attempt + 1} failed for favorite place $id: $e',
+                  );
+                  if (attempt == tries - 1) return null;
+                  await Future.delayed(const Duration(milliseconds: 250));
+                }
               }
-            }).toList();
+              return null;
+            }
 
+            final futures = missing
+                .map((id) => fetchPlaceWithRetry(id))
+                .toList();
             final results = await Future.wait(futures);
             // Insert fetched places at the front so they appear in lists.
             for (final place in results.whereType<Place>()) {

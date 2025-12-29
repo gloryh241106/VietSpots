@@ -184,6 +184,7 @@ class ChatService {
       final response = await _api.post(
         '/chat/messages',
         body: request.toJson(),
+        timeout: const Duration(seconds: 8),
       );
       return ApiResponse.fromJson(response, null);
     } catch (e) {

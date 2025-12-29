@@ -72,6 +72,10 @@ dependencies:
   audioplayers: ^6.5.1
   # Local speech-to-text (uses platform speech recognizer)
   speech_to_text: ^7.3.0
+  # Platform TTS fallback
+  flutter_tts: ^4.0.0
+  # Audio recording fallback
+  record: ^6.1.2
   # WebView (use newer android plugin to satisfy AGP namespace requirement)
   webview_flutter: ^4.13.0
   webview_flutter_android: ^4.10.11

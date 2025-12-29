@@ -1,6 +1,8 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:io' as io;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 // ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -54,20 +56,71 @@ class _GeneralInfoScreenState extends State<GeneralInfoScreen> {
   }
 
   Future<void> _changeAvatar() async {
-    // Request gallery permission before opening picker.
-    final status = await Permission.photos.request();
-    if (!status.isGranted) {
-      if (mounted) {
+    // Let user choose Camera or Gallery, then request the appropriate permission.
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) {
+        final loc = Provider.of<LocalizationProvider>(ctx, listen: false);
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: Text(loc.translate('gallery')),
+                onTap: () => Navigator.pop(ctx, 'gallery'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: Text(loc.translate('camera')),
+                onTap: () => Navigator.pop(ctx, 'camera'),
+              ),
+              ListTile(
+                title: Text(
+                  Provider.of<LocalizationProvider>(
+                    ctx,
+                    listen: false,
+                  ).translate('cancel'),
+                ),
+                onTap: () => Navigator.pop(ctx, null),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (choice == null) return;
+
+    // Request appropriate permission
+    if (choice == 'gallery') {
+      Permission requestPerm = Permission.photos;
+      if (io.Platform.isAndroid) requestPerm = Permission.storage;
+      final status = await requestPerm.request();
+      if (!status.isGranted) {
         final loc = Provider.of<LocalizationProvider>(context, listen: false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(loc.translate('photo_permission_required'))),
         );
+        if (status.isPermanentlyDenied) openAppSettings();
+        return;
       }
-      return;
+    } else if (choice == 'camera') {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        final loc = Provider.of<LocalizationProvider>(context, listen: false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(loc.translate('photo_permission_required'))),
+        );
+        if (status.isPermanentlyDenied) openAppSettings();
+        return;
+      }
     }
 
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
+    final picked = await picker.pickImage(
+      source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+    );
     if (picked == null) return;
 
     final bytes = await picked.readAsBytes();
@@ -1018,28 +1071,9 @@ class LanguageScreen extends StatelessWidget {
       body: Stack(
         children: [
           ListView(
-            children: [
-              _buildLangTile(
-                context,
-                locProvider.translate('language_english'),
-                'en',
-              ),
-              _buildLangTile(
-                context,
-                locProvider.translate('language_vietnamese'),
-                'vi',
-              ),
-              _buildLangTile(
-                context,
-                locProvider.translate('language_russian'),
-                'ru',
-              ),
-              _buildLangTile(
-                context,
-                locProvider.translate('language_chinese'),
-                'zh',
-              ),
-            ],
+            children: locProvider.supportedLanguages.entries
+                .map((e) => _buildLangTile(context, e.value, e.key))
+                .toList(),
           ),
           if (locProvider.isLoading)
             Container(
@@ -1068,6 +1102,94 @@ class LanguageScreen extends StatelessWidget {
           locProvider.setLanguage(code);
         }
       },
+    );
+  }
+}
+
+// --- STT Language Selection ---
+
+class SttLanguageScreen extends StatefulWidget {
+  const SttLanguageScreen({super.key});
+
+  @override
+  State<SttLanguageScreen> createState() => _SttLanguageScreenState();
+}
+
+class _SttLanguageScreenState extends State<SttLanguageScreen> {
+  final SpeechToText _speech = SpeechToText();
+  List<LocaleName> _locales = [];
+  String? _selected;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final current = prefs.getString('preferred_stt_language');
+      _selected = current;
+      final ok = await _speech.initialize();
+      if (!ok) {
+        setState(() {
+          _locales = [];
+          _loading = false;
+        });
+        return;
+      }
+      final locales = await _speech.locales();
+      setState(() {
+        _locales = locales;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _locales = [];
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
+    return Scaffold(
+      appBar: AppBar(title: Text(loc.translate('language'))),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              children: [
+                if (_locales.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(loc.translate('help_center_body')),
+                  ),
+                ..._locales.map((l) {
+                  final id = l.localeId.replaceAll('_', '-');
+                  final name = l.name;
+                  final selected = _selected == id;
+                  return ListTile(
+                    title: Text('$name ($id)'),
+                    trailing: selected ? const Icon(Icons.check) : null,
+                    onTap: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('preferred_stt_language', id);
+                      setState(() => _selected = id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '${loc.translate('stt_language')}: $name ($id)',
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }),
+              ],
+            ),
     );
   }
 }

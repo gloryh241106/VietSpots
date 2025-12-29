@@ -55,7 +55,9 @@ class NotificationScreen extends StatelessWidget {
             final isUnread = notif['isUnread'] as bool;
 
             return Container(
-              color: isUnread ? Theme.of(context).primaryColor.withValues(alpha: 0.06) : Colors.transparent,
+              color: isUnread
+                  ? Theme.of(context).primaryColor.withValues(alpha: 0.06)
+                  : Colors.transparent,
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16.0,
@@ -64,7 +66,11 @@ class NotificationScreen extends StatelessWidget {
                 leading: Stack(
                   children: [
                     CircleAvatar(
-                      backgroundColor: isUnread ? Theme.of(context).primaryColor.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
+                      backgroundColor: isUnread
+                          ? Theme.of(
+                              context,
+                            ).primaryColor.withValues(alpha: 0.1)
+                          : Colors.grey.withValues(alpha: 0.1),
                       child: Icon(
                         isUnread
                             ? Icons.notifications_active

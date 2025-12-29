@@ -158,6 +158,22 @@ class SettingsScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => const LanguageScreen()),
               ),
             ),
+            _buildDivider(),
+            _buildSettingsTile(
+              context,
+              icon: Icons.mic,
+              title: locProvider.translate('speech_language'),
+              trailing: Icon(
+                Icons.chevron_right,
+                color: Theme.of(context).dividerColor,
+              ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SttLanguageScreen(),
+                ),
+              ),
+            ),
           ]),
           const SizedBox(height: 24),
           _buildSectionHeader(

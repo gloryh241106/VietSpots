@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:vietspots/models/chat_model.dart';
@@ -61,12 +63,16 @@ class _ChatScreenState extends State<ChatScreen> {
     ).showSnackBar(SnackBar(content: Text(loc.translate('new_chat_started'))));
   }
 
-  String _timeAgo(DateTime dateTime) {
+  String _timeAgo(DateTime dateTime, LocalizationProvider loc) {
     final diff = DateTime.now().difference(dateTime);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inHours < 1) return '${diff.inMinutes} min ago';
-    if (diff.inDays < 1) return '${diff.inHours} hours ago';
-    return '${diff.inDays} days ago';
+    if (diff.inMinutes < 1) return loc.translate('time_just_now');
+    if (diff.inHours < 1) {
+      return '${diff.inMinutes} ${loc.translate('time_minutes_ago')}';
+    }
+    if (diff.inDays < 1) {
+      return '${diff.inHours} ${loc.translate('time_hours_ago')}';
+    }
+    return '${diff.inDays} ${loc.translate('time_days_ago')}';
   }
 
   @override
@@ -148,7 +154,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         return ListTile(
                           leading: const Icon(Icons.history),
                           title: Text(conv.title),
-                          subtitle: Text(_timeAgo(conv.updatedAt)),
+                          subtitle: Text(_timeAgo(conv.updatedAt, loc)),
                           onTap: () {
                             Navigator.pop(context);
                             Provider.of<ChatProvider>(
@@ -174,11 +180,13 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ),
                                       ListTile(
                                         title: Text(loc.translate('share')),
-                                        onTap: () => Navigator.pop(ctx, 'share'),
+                                        onTap: () =>
+                                            Navigator.pop(ctx, 'share'),
                                       ),
                                       ListTile(
                                         title: Text(loc.translate('delete')),
-                                        onTap: () => Navigator.pop(ctx, 'delete'),
+                                        onTap: () =>
+                                            Navigator.pop(ctx, 'delete'),
                                       ),
                                       ListTile(
                                         title: Text(loc.translate('cancel')),
@@ -327,10 +335,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ? Colors.grey[850]
                                 : Colors.grey[200]),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Theme.of(context).dividerColor,
-                          width: 1,
-                        ),
                         boxShadow: [
                           BoxShadow(
                             color: const Color.fromRGBO(0, 0, 0, 0.05),
@@ -351,9 +355,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                 context,
                               ).inputDecorationTheme.hintStyle ??
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).textTheme.bodyLarge?.color?.withValues(alpha: 0.6),
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.color
+                                    ?.withValues(alpha: 0.6),
                               ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(
@@ -483,8 +489,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       boxShadow: [
                         BoxShadow(
                           color: Theme.of(
-                              context,
-                            ).primaryColor.withValues(alpha: 0.25),
+                            context,
+                          ).primaryColor.withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -555,6 +561,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildMessageBubble(ChatMessage msg) {
     final isUser = msg.isUser;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -576,120 +583,178 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 8),
           ],
+
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isUser
-                    ? Theme.of(context).primaryColor
-                    : Theme.of(context).cardColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: isUser ? const Radius.circular(18) : Radius.zero,
-                  bottomRight: isUser ? Radius.zero : const Radius.circular(18),
+            child: GestureDetector(
+              onLongPress: () async {
+                final loc = Provider.of<LocalizationProvider>(
+                  context,
+                  listen: false,
+                );
+                final choice = await showModalBottomSheet<String>(
+                  context: context,
+                  builder: (ctx) => SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.copy),
+                          title: Text(loc.translate('copy')),
+                          onTap: () => Navigator.pop(ctx, 'copy'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.volume_up),
+                          title: Text(loc.translate('read_aloud')),
+                          onTap: () => Navigator.pop(ctx, 'tts'),
+                        ),
+                        ListTile(
+                          title: Text(loc.translate('cancel')),
+                          onTap: () => Navigator.pop(ctx, null),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+
+                if (choice == 'copy') {
+                  await Clipboard.setData(ClipboardData(text: msg.text));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${loc.translate('copy')} ✓')),
+                  );
+                } else if (choice == 'tts') {
+                  String lang = 'vi-VN';
+                  try {
+                    final prefs = await SharedPreferences.getInstance();
+                    lang =
+                        prefs.getString('preferred_tts_language') ??
+                        prefs.getString('preferred_stt_language') ??
+                        lang;
+                  } catch (_) {}
+                  Provider.of<ChatProvider>(
+                    context,
+                    listen: false,
+                  ).playTts(msg.text, language: lang);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isUser
+                      ? Theme.of(context).primaryColor
+                      : Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: isUser
+                        ? const Radius.circular(18)
+                        : Radius.zero,
+                    bottomRight: isUser
+                        ? Radius.zero
+                        : const Radius.circular(18),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color.fromRGBO(0, 0, 0, 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color.fromRGBO(0, 0, 0, 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Use MarkdownBody for better formatting
-                  MarkdownBody(
-                    data: msg.text,
-                    styleSheet: MarkdownStyleSheet(
-                      p: TextStyle(
-                        color: isUser
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : (Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black87),
-                        fontSize: 15,
-                        height: 1.5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MarkdownBody(
+                      data: msg.text,
+                      styleSheet: MarkdownStyleSheet(
+                        p: TextStyle(
+                          color: isUser
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                    Colors.black87),
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                        h1: TextStyle(
+                          color: isUser
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                    Colors.black87),
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          height: 1.4,
+                        ),
+                        h2: TextStyle(
+                          color: isUser
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                    Colors.black87),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          height: 1.4,
+                        ),
+                        h3: TextStyle(
+                          color: isUser
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                    Colors.black87),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                        strong: TextStyle(
+                          color: isUser
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                    Colors.black87),
+                          fontWeight: FontWeight.bold,
+                        ),
+                        em: TextStyle(
+                          color: isUser
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                    Colors.black87),
+                          fontStyle: FontStyle.italic,
+                        ),
+                        listBullet: TextStyle(
+                          color: isUser
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : (Theme.of(context).textTheme.bodyLarge?.color ??
+                                    Colors.black87),
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                        listIndent: 24,
+                        blockSpacing: 12,
+                        listBulletPadding: const EdgeInsets.only(right: 8),
+                        pPadding: const EdgeInsets.symmetric(vertical: 4),
                       ),
-                      h1: TextStyle(
-                        color: isUser
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : (Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black87),
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        height: 1.4,
-                      ),
-                      h2: TextStyle(
-                        color: isUser
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : (Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black87),
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        height: 1.4,
-                      ),
-                      h3: TextStyle(
-                        color: isUser
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : (Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black87),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        height: 1.4,
-                      ),
-                      strong: TextStyle(
-                        color: isUser
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : (Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black87),
-                        fontWeight: FontWeight.bold,
-                      ),
-                      em: TextStyle(
-                        color: isUser
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : (Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black87),
-                        fontStyle: FontStyle.italic,
-                      ),
-                      listBullet: TextStyle(
-                        color: isUser
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : (Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black87),
-                        fontSize: 15,
-                        height: 1.5,
-                      ),
-                      listIndent: 24,
-                      blockSpacing: 12,
-                      listBulletPadding: const EdgeInsets.only(right: 8),
-                      pPadding: const EdgeInsets.symmetric(vertical: 4),
+                      selectable: true,
                     ),
-                    selectable: true,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatTimestamp(msg.timestamp),
-                    style: TextStyle(
-                      color: isUser
-                          ? Theme.of(
-                              context,
-                            ).colorScheme.onPrimary.withValues(alpha: 0.7)
-                          : Colors.grey[600],
-                      fontSize: 11,
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatTimestamp(msg.timestamp),
+                      style: TextStyle(
+                        color: isUser
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.onPrimary.withValues(alpha: 0.7)
+                            : Colors.grey[600],
+                        fontSize: 11,
+                      ),
                     ),
-                  ),
-                  if (msg.relatedPlaces != null &&
-                      msg.relatedPlaces!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12.0),
-                      child: ChatPlacesCarousel(places: msg.relatedPlaces!),
-                    ),
-                ],
+                    if (msg.relatedPlaces != null &&
+                        msg.relatedPlaces!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: ChatPlacesCarousel(places: msg.relatedPlaces!),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
+
           if (isUser) ...[
             const SizedBox(width: 8),
             CircleAvatar(

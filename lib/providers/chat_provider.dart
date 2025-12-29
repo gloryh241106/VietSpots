@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter/services.dart';
 import 'package:vietspots/models/chat_model.dart';
 import 'package:vietspots/models/place_model.dart';
@@ -39,6 +41,11 @@ class ChatProvider with ChangeNotifier {
   final List<ChatConversation> _history = [];
   String? _activeConversationId;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final FlutterTts _flutterTts = FlutterTts();
+  final SpeechToText _speechToText = SpeechToText();
+  bool _speechAvailable = false;
+  String _lastSpeechResult = '';
+
   // Streaming display state for bot messages (partial reveal like ChatGPT)
   final Map<String, String> _streamingText = {};
   static final MethodChannel _recorderChannel = MethodChannel(
@@ -63,6 +70,17 @@ class ChatProvider with ChangeNotifier {
   ChatProvider(this._chatService, this._placeService, [dynamic outboundQueue]) {
     _getUserLocation();
     _loadChatHistoryFromLocal();
+    // Initialize on-device speech recognizer in background
+    _initSpeechRecognizer();
+  }
+
+  Future<void> _initSpeechRecognizer() async {
+    try {
+      _speechAvailable = await _speechToText.initialize();
+      notifyListeners();
+    } catch (_) {
+      _speechAvailable = false;
+    }
   }
 
   /// Start push-to-talk recording. Returns true if recording started.
@@ -73,15 +91,55 @@ class ChatProvider with ChangeNotifier {
       _isRecording = true;
       _recordingStart = DateTime.now();
       notifyListeners();
-      // Prefer platform SpeechRecognizer (startListening). If not supported, fall back to file-based recorder start.
+      // Prefer package-based on-device SpeechRecognizer (speech_to_text)
+      try {
+        String lang = 'vi-VN';
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          lang = prefs.getString('preferred_stt_language') ?? lang;
+        } catch (_) {}
+
+        final localeId = lang.replaceAll('-', '_');
+
+        if (!_speechAvailable) {
+          _speechAvailable = await _speechToText.initialize();
+        }
+
+        if (_speechAvailable) {
+          _lastSpeechResult = '';
+          _speechToText.listen(
+            onResult: (r) {
+              _lastSpeechResult = r.recognizedWords;
+              notifyListeners();
+            },
+            localeId: localeId,
+            listenFor: const Duration(minutes: 1),
+          );
+          return true;
+        }
+      } catch (e) {
+        debugPrint('speech_to_text start failed: $e');
+      }
+
+      // Fallback: platform recorder via MethodChannel
       try {
         final started = await _recorderChannel.invokeMethod<bool>(
           'startListening',
         );
         if (started == true) return true;
       } catch (_) {}
-      final path = await _recorderChannel.invokeMethod<String>('start');
-      return path != null && path.isNotEmpty;
+
+      try {
+        final path = await _recorderChannel.invokeMethod<String>('start');
+        if (path != null && path.isNotEmpty) return true;
+      } catch (_) {}
+
+      try {
+        final path = await _recorderChannel.invokeMethod<String>('start');
+        return path != null && path.isNotEmpty;
+      } catch (_) {
+        return false;
+      }
     } catch (e) {
       debugPrint('Start recording failed: $e');
       _isRecording = false;
@@ -99,18 +157,25 @@ class ChatProvider with ChangeNotifier {
       final startedAt = _recordingStart;
       _recordingStart = null;
       notifyListeners();
-      // First try platform SpeechRecognizer stop (on-device live STT)
+      // First try package-based on-device STT (speech_to_text)
+      try {
+        if (_speechAvailable && _speechToText.isListening) {
+          await _speechToText.stop();
+          if (_lastSpeechResult.isNotEmpty) return _lastSpeechResult;
+        }
+      } catch (e) {
+        debugPrint('speech_to_text stop failed: $e');
+      }
+
+      String? path;
+      // Fallback: platform stop which may return a transcript or a file path
       try {
         final transcript = await _recorderChannel.invokeMethod<String>(
           'stopListening',
         );
         if (transcript != null && transcript.isNotEmpty) return transcript;
-      } catch (e) {
-        // ignore and fall back to file upload
-      }
+      } catch (_) {}
 
-      String? path;
-      // Try platform stop which may return a transcript or a file path
       try {
         path = await _recorderChannel.invokeMethod<String>('stop');
       } catch (_) {
@@ -122,7 +187,17 @@ class ChatProvider with ChangeNotifier {
 
       // Upload to backend STT endpoint
       try {
-        final resp = await _chatService.transcribeAudioFile(file);
+        // Read preferred STT language if present
+        String lang = 'vi-VN';
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          lang = prefs.getString('preferred_stt_language') ?? lang;
+        } catch (_) {}
+
+        final resp = await _chatService.transcribeAudioFile(
+          file,
+          language: lang,
+        );
         final transcript = resp['transcript']?.toString() ?? '';
         if (transcript.isNotEmpty) {
           // Log duration if available
@@ -149,11 +224,40 @@ class ChatProvider with ChangeNotifier {
         language: language,
       );
       // Use DeviceFileSource on newer audioplayers versions
-      await _audioPlayer.stop();
-      await _audioPlayer.play(DeviceFileSource(file.path));
+      if (file.existsSync()) {
+        await _audioPlayer.stop();
+        await _audioPlayer.play(DeviceFileSource(file.path));
+        return;
+      }
+      debugPrint('TTS file not found, falling back to platform TTS');
     } catch (e) {
       debugPrint('Play TTS failed: $e');
     }
+
+    // Fallback: try platform TTS (on-device)
+    try {
+      await _audioPlayer.stop();
+      await _flutterTts.setLanguage(language);
+      await _flutterTts.speak(text);
+    } catch (e) {
+      debugPrint('Fallback platform TTS failed: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    try {
+      _audioPlayer.dispose();
+    } catch (_) {}
+    try {
+      _flutterTts.stop();
+    } catch (_) {}
+    try {
+      if (_speechAvailable) {
+        _speechToText.stop();
+      }
+    } catch (_) {}
+    super.dispose();
   }
 
   /// Load chat history from local storage

@@ -27,9 +27,12 @@ class ApiResponse<T> {
     Map<String, dynamic> json,
     T Function(dynamic)? fromJsonT,
   ) {
+    final dynamic rawMessage = json['message'];
     return ApiResponse<T>(
       success: json['success'] ?? false,
-      message: json['message'] ?? '',
+      message: rawMessage is String
+          ? rawMessage
+          : (rawMessage == null ? '' : rawMessage.toString()),
       data: fromJsonT != null && json['data'] != null
           ? fromJsonT(json['data'])
           : json['data'],
@@ -266,11 +269,17 @@ class ApiService {
         } catch (_) {
           parsed = bodyString;
         }
+
+        final dynamic extractedMessage = parsed is Map
+            ? (parsed['message'] ?? parsed['detail'] ?? parsed)
+            : parsed;
+        final String message = extractedMessage is String
+            ? extractedMessage
+            : extractedMessage.toString();
+
         throw ApiException(
           statusCode: response.statusCode,
-          message: parsed is Map
-              ? (parsed['message'] ?? parsed['detail'] ?? parsed.toString())
-              : parsed.toString(),
+          message: message,
           body: parsed,
         );
       }
@@ -300,7 +309,8 @@ class ApiService {
 
     String message = 'Unknown error';
     if (body is Map<String, dynamic>) {
-      message = body['detail'] ?? body['message'] ?? message;
+      final dynamic msgValue = body['detail'] ?? body['message'] ?? message;
+      message = msgValue is String ? msgValue : msgValue.toString();
     } else if (body is String && body.isNotEmpty) {
       message = body;
     }

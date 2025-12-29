@@ -7,6 +7,7 @@ import 'package:vietspots/models/place_model.dart';
 import 'package:vietspots/providers/place_provider.dart';
 import 'package:vietspots/screens/detail/directions_map_screen.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vietspots/providers/localization_provider.dart';
@@ -19,6 +20,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:vietspots/services/image_service.dart';
 import 'package:vietspots/providers/auth_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PlaceDetailScreen extends StatefulWidget {
   final Place place;
@@ -1849,7 +1851,29 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
     if (!mounted || choice == null) return;
 
     try {
+      final loc = Provider.of<LocalizationProvider>(context, listen: false);
       if (choice == 'camera') {
+        final status = await Permission.camera.request();
+        if (!mounted) return;
+        if (!status.isGranted) {
+          if (status.isPermanentlyDenied) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(loc.translate('photo_permission_denied')),
+                action: SnackBarAction(
+                  label: loc.translate('open_settings'),
+                  onPressed: () => openAppSettings(),
+                ),
+              ),
+            );
+            return;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(loc.translate('photo_permission_denied'))),
+          );
+          return;
+        }
+
         final picked = await _picker.pickImage(
           source: ImageSource.camera,
           imageQuality: 75,
@@ -1862,7 +1886,44 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
           _imageBytes.add(bytes);
         });
       } else {
-        // Gallery: allow multi-select on supported platforms
+        // Gallery: request appropriate permission per platform.
+        // On newer Android versions Permission.photos (READ_MEDIA_IMAGES) may be available,
+        // otherwise fall back to storage.
+        PermissionStatus status;
+        try {
+          if (Platform.isIOS) {
+            status = await Permission.photos.request();
+          } else {
+            // Android: try photos first (modern), then storage
+            status = await Permission.photos.request();
+            if (!status.isGranted) {
+              status = await Permission.storage.request();
+            }
+          }
+        } catch (_) {
+          status = await Permission.storage.request();
+        }
+        if (!mounted) return;
+        if (!status.isGranted) {
+          if (status.isPermanentlyDenied) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(loc.translate('photo_permission_denied')),
+                action: SnackBarAction(
+                  label: loc.translate('open_settings'),
+                  onPressed: () => openAppSettings(),
+                ),
+              ),
+            );
+            return;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(loc.translate('photo_permission_denied'))),
+          );
+          return;
+        }
+
+        // Allow multi-select on supported platforms
         try {
           final pickedList = await _picker.pickMultiImage(imageQuality: 75);
           if (pickedList.isNotEmpty) {
@@ -1976,6 +2037,26 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
           }
         } catch (e) {
           debugPrint('Image upload failed: $e');
+        }
+
+        // Additionally, attempt OCR on the first attached image to
+        // infer a preferred STT language. Store it in SharedPreferences
+        // so push-to-talk transcriptions can use it.
+        try {
+          final firstBytes = _imageBytes.first;
+          final ocrText = await imageService.extractTextFromBytes(firstBytes);
+          if (ocrText.isNotEmpty) {
+            final detected = imageService.detectLanguageFromText(ocrText);
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('preferred_stt_language', detected);
+              debugPrint('Saved preferred STT language: $detected');
+            } catch (e) {
+              debugPrint('Failed to save preferred STT language: $e');
+            }
+          }
+        } catch (e) {
+          debugPrint('OCR/detect failed: $e');
         }
       }
 
@@ -2101,9 +2182,31 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
                       const SizedBox(height: 12),
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: ElevatedButton(
-                          onPressed: _pickImage,
-                          child: Text(loc.translate('attach_image')),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _pickImage,
+                              icon: const Icon(Icons.photo_library_outlined),
+                              label: Text(loc.translate('attach_image')),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 3,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              loc.translate('attach_image_hint'),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: Colors.grey[600]),
+                            ),
+                          ],
                         ),
                       ),
                       if (_imageBytes.isNotEmpty) ...[
@@ -2138,23 +2241,78 @@ class _AddReviewBottomSheetState extends State<_AddReviewBottomSheet> {
                               final bytes = _imageBytes[idx];
                               return Stack(
                                 children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.memory(
-                                      bytes,
+                                  GestureDetector(
+                                    onTap: () {
+                                      showDialog<void>(
+                                        context: context,
+                                        builder: (ctx) => Dialog(
+                                          insetPadding: const EdgeInsets.all(
+                                            12,
+                                          ),
+                                          child: InteractiveViewer(
+                                            panEnabled: true,
+                                            minScale: 1.0,
+                                            maxScale: 4.0,
+                                            child: Image.memory(
+                                              bytes,
+                                              fit: BoxFit.contain,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => Container(
+                                                    color: Colors.grey[200],
+                                                    child: const Icon(
+                                                      Icons.broken_image,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
                                       width: 96,
                                       height: 96,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Container(
-                                                width: 96,
-                                                height: 96,
-                                                color: Colors.grey[200],
-                                                child: const Icon(
-                                                  Icons.broken_image,
-                                                ),
-                                              ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .secondary
+                                              .withValues(alpha: 46),
+                                          width: 2,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: 15,
+                                            ),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.memory(
+                                          bytes,
+                                          width: 96,
+                                          height: 96,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  Container(
+                                                    width: 96,
+                                                    height: 96,
+                                                    color: Colors.grey[200],
+                                                    child: const Icon(
+                                                      Icons.broken_image,
+                                                    ),
+                                                  ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   Positioned(

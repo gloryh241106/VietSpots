@@ -9,6 +9,9 @@ class LocalizationProvider with ChangeNotifier {
 
   final Map<String, Map<String, String>> _localizedValues = {
     'en': {
+      'gallery': 'Gallery',
+      'camera': 'Camera',
+      'attach_image_hint': 'Attach photos (jpg, png)',
       'app_name': 'VietSpots',
       'home': 'Home',
       'notification': 'Notification',
@@ -94,6 +97,7 @@ class LocalizationProvider with ChangeNotifier {
       'location_permission_denied': 'Location permission denied.',
       'notification_permission_denied': 'Notification permission denied.',
       'photo_permission_denied': 'Photo permission denied.',
+      'open_settings': 'Open Settings',
 
       'help_center': 'Help Center',
       'help_center_body': 'Content is being updated.',
@@ -218,6 +222,14 @@ class LocalizationProvider with ChangeNotifier {
       'chat_greeting': 'Hi there!',
       'chat_intro':
           'Ask TourMate for sightseeing suggestions\nbased on your needs.',
+      'copy': 'Copy',
+      'read_aloud': 'Read aloud',
+      'speech_language': 'Speech language',
+      'stt_language': 'Speech-to-text language',
+      'time_just_now': 'Just now',
+      'time_minutes_ago': 'min ago',
+      'time_hours_ago': 'hours ago',
+      'time_days_ago': 'days ago',
       'typing': 'VietSpots is typing',
       'ai_name': 'VietSpots AI',
       'ai_subtitle': 'Your Personal Travel Assistant',
@@ -245,6 +257,9 @@ class LocalizationProvider with ChangeNotifier {
       'yes': 'Yes',
     },
     'vi': {
+      'gallery': 'Thư viện',
+      'camera': 'Máy ảnh',
+      'attach_image_hint': 'Đính kèm ảnh (jpg, png)',
       'app_name': 'VietSpots',
       'home': 'Trang chủ',
       'notification': 'Thông báo',
@@ -328,6 +343,7 @@ class LocalizationProvider with ChangeNotifier {
       'location_permission_denied': 'Từ chối quyền vị trí.',
       'notification_permission_denied': 'Từ chối quyền thông báo.',
       'photo_permission_denied': 'Từ chối quyền ảnh.',
+      'open_settings': 'Mở Cài đặt',
 
       'help_center': 'Trung tâm trợ giúp',
       'help_center_body': 'Nội dung đang được cập nhật.',
@@ -451,6 +467,14 @@ class LocalizationProvider with ChangeNotifier {
       'chat_hint': 'Hỏi TourMate...',
       'chat_greeting': 'Xin chào!',
       'chat_intro': 'Hỏi TourMate gợi ý địa điểm\nphù hợp nhu cầu của bạn.',
+      'copy': 'Sao chép',
+      'read_aloud': 'Đọc to',
+      'speech_language': 'Ngôn ngữ giọng nói',
+      'stt_language': 'Ngôn ngữ Speech-to-Text',
+      'time_just_now': 'Vừa xong',
+      'time_minutes_ago': 'phút trước',
+      'time_hours_ago': 'giờ trước',
+      'time_days_ago': 'ngày trước',
       'typing': 'VietSpots đang trả lời',
       'ai_name': 'VietSpots AI',
       'ai_subtitle': 'Trợ lý du lịch cá nhân của bạn',
@@ -478,6 +502,9 @@ class LocalizationProvider with ChangeNotifier {
       'yes': 'Có',
     },
     'ru': {
+      'gallery': 'Галерея',
+      'camera': 'Камера',
+      'attach_image_hint': 'Прикрепите фото (jpg, png)',
       'app_name': 'VietSpots',
       'home': 'Главная',
       'notification': 'Уведомления',
@@ -677,6 +704,14 @@ class LocalizationProvider with ChangeNotifier {
       'chat_hint': 'Спросить TourMate...',
       'chat_greeting': 'Привет!',
       'chat_intro': 'Спросите TourMate о местах\nпо вашим предпочтениям.',
+      'copy': 'Копировать',
+      'read_aloud': 'Прочитать вслух',
+      'speech_language': 'Язык речи',
+      'stt_language': 'Язык распознавания речи',
+      'time_just_now': 'Только что',
+      'time_minutes_ago': 'мин назад',
+      'time_hours_ago': 'ч назад',
+      'time_days_ago': 'дн назад',
       'typing': 'VietSpots печатает',
       'ai_name': 'VietSpots AI',
       'ai_subtitle': 'Ваш личный помощник путешествий',
@@ -704,6 +739,9 @@ class LocalizationProvider with ChangeNotifier {
       'yes': 'Да',
     },
     'zh': {
+      'gallery': '相册',
+      'camera': '相机',
+      'attach_image_hint': '添加照片 (jpg, png)',
       'app_name': 'VietSpots',
       'home': '首页',
       'notification': '通知',
@@ -895,6 +933,14 @@ class LocalizationProvider with ChangeNotifier {
       'chat_hint': '询问 TourMate...',
       'chat_greeting': '你好！',
       'chat_intro': '向 TourMate 询问\n符合你需求的景点推荐。',
+      'copy': '复制',
+      'read_aloud': '朗读',
+      'speech_language': '语音语言',
+      'stt_language': '语音识别语言',
+      'time_just_now': '刚刚',
+      'time_minutes_ago': '分钟前',
+      'time_hours_ago': '小时前',
+      'time_days_ago': '天前',
       'typing': 'VietSpots 正在输入',
       'ai_name': 'VietSpots AI',
       'ai_subtitle': '你的专属旅行助手',
@@ -923,16 +969,67 @@ class LocalizationProvider with ChangeNotifier {
     },
   };
 
+  /// Ensure supported languages have at least a seeded map by cloning English.
+  LocalizationProvider() {
+    final base = _localizedValues['en'] ?? <String, String>{};
+    for (final code in supportedLanguages.keys) {
+      if (!_localizedValues.containsKey(code)) {
+        _localizedValues[code] = Map<String, String>.from(base);
+      }
+    }
+  }
+
+  /// Map of supported language codes to a readable/native name used in
+  /// the language selection UI. Add or remove language codes here to
+  /// control available options in the app.
+  Map<String, String> get supportedLanguages => const {
+    'en': 'English',
+    'vi': 'Tiếng Việt',
+    'ru': 'Русский',
+    'zh': '中文',
+    'es': 'Español',
+    'fr': 'Français',
+    'de': 'Deutsch',
+    'ja': '日本語',
+    'ko': '한국어',
+    'th': 'ไทย',
+    'hi': 'हिन्दी',
+    'ar': 'العربية',
+    'pt': 'Português',
+    'id': 'Bahasa Indonesia',
+    'ms': 'Bahasa Melayu',
+    'nl': 'Nederlands',
+    'sv': 'Svenska',
+    'no': 'Norsk',
+    'da': 'Dansk',
+    'fi': 'Suomi',
+    'pl': 'Polski',
+    'cs': 'Čeština',
+    'he': 'עברית',
+    'tr': 'Türkçe',
+  };
+
   String translate(String key) {
-    return _localizedValues[_locale.languageCode]?[key] ?? key;
+    // Prefer the selected language, fall back to English, then to the key.
+    return _localizedValues[_locale.languageCode]?[key] ??
+        _localizedValues['en']?[key] ??
+        key;
   }
 
   Future<void> setLanguage(String languageCode) async {
     _isLoading = true;
     notifyListeners();
 
-    // Simulate loading delay
-    await Future.delayed(const Duration(seconds: 3));
+    // Apply language immediately (no artificial delay) so UI updates fast.
+
+    // If we don't have translations for the requested language yet,
+    // seed it with English strings so the UI remains usable. Later we
+    // can replace these with proper translations (machine or human).
+    if (!_localizedValues.containsKey(languageCode)) {
+      _localizedValues[languageCode] = Map<String, String>.from(
+        _localizedValues['en'] ?? <String, String>{},
+      );
+    }
 
     _locale = Locale(languageCode);
     _isLoading = false;
